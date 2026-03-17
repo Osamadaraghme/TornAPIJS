@@ -4,7 +4,7 @@
  *   CMD:        set TORN_API_KEY=your_key && node run-random.js
  */
 
-const { getRandomPlayer } = require('./src/random-player.js');
+const { getRandomPlayer } = require('./src/services/random-player.js');
 
 const apiKey = process.env.TORN_API_KEY;
 if (!apiKey) {

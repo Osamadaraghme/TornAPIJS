@@ -1,0 +1,196 @@
+/**
+ * Service: random ACTIVE player with xanax-based tier (S/A/B/C/D).
+ * Finds a player active in the last N hours, applies optional faction/company/tier filters,
+ * computes score and tier, fetches faction/company names, returns result + API call count.
+ */
+
+const { fetchUser, fetchFactionName, fetchCompanyName } = require('../api/torn-client.js');
+const {
+    extractLastActionTimestampSeconds,
+    extractName,
+    extractLevel,
+    extractAgeDays,
+    hasFactionFromProfile,
+    hasCompanyFromProfile,
+    extractFactionId,
+    extractCompanyId,
+    extractCompanyNameFromProfile,
+    extractXanaxTaken,
+} = require('../utils/extractors.js');
+const { computeScores, tierForFinalScore } = require('../utils/scoring.js');
+const { messageForTornError, buildNoPlayerFoundError, TORN_FATAL_ERROR_CODES } = require('../utils/errors.js');
+const { randomIntInclusive } = require('../utils/helpers.js');
+
+/**
+ * Normalise and validate options; return a single options object.
+ */
+function parseOptions(opts) {
+    return {
+        activeWithinHours: Number.isFinite(opts.activeWithinHours) ? opts.activeWithinHours : 24,
+        minId: Number.isFinite(opts.minId) ? opts.minId : 1,
+        maxId: Number.isFinite(opts.maxId) ? opts.maxId : 3000000,
+        maxTries: Number.isFinite(opts.maxTries) ? opts.maxTries : 60,
+        period: opts.period === 'month' ? 'month' : 'day',
+        desiredTier: (typeof opts.tier === 'string' ? opts.tier : 'ALL').toUpperCase(),
+        factionFilter: (typeof opts.hasFaction === 'string' ? opts.hasFaction : 'ANY').toUpperCase(),
+        companyFilter: (typeof opts.hasCompany === 'string' ? opts.hasCompany : 'ANY').toUpperCase(),
+    };
+}
+
+/**
+ * Check if this profile passes faction and company filters.
+ */
+function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) {
+    const hasFaction = hasFactionFromProfile(profileData);
+    const hasCompany = hasCompanyFromProfile(profileData);
+    if (factionFilter === 'Y' && !hasFaction) return false;
+    if (factionFilter === 'N' && hasFaction) return false;
+    if (companyFilter === 'Y' && !hasCompany) return false;
+    if (companyFilter === 'N' && hasCompany) return false;
+    return true;
+}
+
+/**
+ * Build the success response object for one matched player.
+ */
+function buildResult(id, profileData, scores, period, ps, counter) {
+    const name = extractName(profileData);
+    const level = extractLevel(profileData);
+    const hasFaction = hasFactionFromProfile(profileData);
+    const hasCompany = hasCompanyFromProfile(profileData);
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const lastActionTs = extractLastActionTimestampSeconds(profileData);
+    const hoursSinceLastAction = (nowSeconds - lastActionTs) / 3600;
+
+    const xanScorePct = scores.xanScore * 100;
+    const finalScorePct = scores.finalScore * 100;
+    const tier = tierForFinalScore(finalScorePct);
+
+    const factionId = extractFactionId(profileData);
+    const companyId = extractCompanyId(profileData);
+    const companyNameFromProfile = extractCompanyNameFromProfile(profileData);
+
+    return {
+        playerId: Number(id),
+        name,
+        level,
+        hasFaction,
+        hasCompany,
+        factionName: null, // filled below after async fetches
+        companyName: companyNameFromProfile ?? null,
+        hoursSinceLastAction: Number(hoursSinceLastAction.toFixed(2)),
+        xanScore: Number(xanScorePct.toFixed(2)),
+        tier,
+        avgXanaxPerDay: scores.avgXanaxPerDay != null ? Number(scores.avgXanaxPerDay.toFixed(4)) : null,
+        avgXanaxPerMonth: scores.avgXanaxPerMonth != null ? Number(scores.avgXanaxPerMonth.toFixed(2)) : null,
+        statsAvailable: Boolean(scores.statsAvailable) && Boolean(ps),
+        periodUsed: period,
+        tornApiCallsUsed: counter.value,
+        _factionId: factionId,
+        _companyId: companyId,
+        _companyNameFromProfile: companyNameFromProfile,
+    };
+}
+
+/**
+ * Get a random player active in the last X hours, with optional tier/faction/company filters.
+ * @param {string} apiKey - Torn API key
+ * @param {object} [opts] - activeWithinHours, minId, maxId, maxTries, period, tier, hasFaction, hasCompany
+ * @returns {Promise<object>} Player result including tornApiCallsUsed
+ */
+async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
+    if (!apiKey) throw new Error('Torn API key is required.');
+
+    const {
+        activeWithinHours,
+        minId,
+        maxId,
+        maxTries,
+        period,
+        desiredTier,
+        factionFilter,
+        companyFilter,
+    } = parseOptions(opts);
+
+    const counter = { value: 0 };
+    const runStats = { profilesOk: 0, activeCount: 0, passedFiltersCount: 0, lastTornError: null };
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const cutoff = nowSeconds - Math.floor(activeWithinHours * 3600);
+
+    for (let i = 0; i < maxTries; i++) {
+        const id = randomIntInclusive(minId, maxId);
+
+        const profileData = await fetchUser(id, 'profile', apiKey, counter);
+
+        if (profileData?.error) {
+            runStats.lastTornError = messageForTornError(profileData.error);
+            const code = profileData.error?.code ?? profileData.error?.error_code;
+            if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
+                throw new Error(runStats.lastTornError || `Torn API error (code ${code}).`);
+            }
+            continue;
+        }
+        runStats.profilesOk++;
+
+        const lastActionTs = extractLastActionTimestampSeconds(profileData);
+        if (!lastActionTs || lastActionTs < cutoff) continue;
+        runStats.activeCount++;
+
+        if (!passesFactionCompanyFilters(profileData, factionFilter, companyFilter)) continue;
+        runStats.passedFiltersCount++;
+
+        let personalstatsData = null;
+        try {
+            personalstatsData = await fetchUser(id, 'personalstats', apiKey, counter);
+        } catch {
+            personalstatsData = null;
+        }
+        if (personalstatsData?.error) {
+            runStats.lastTornError = messageForTornError(personalstatsData.error);
+        }
+
+        const ps = personalstatsData && !personalstatsData.error
+            ? (personalstatsData.personalstats || personalstatsData)
+            : null;
+        const xanTaken = ps ? extractXanaxTaken(ps) : null;
+        const ageDays = extractAgeDays(profileData);
+
+        const scores = computeScores({
+            xanaxTakenTotal: xanTaken,
+            ageDays,
+            period,
+        });
+
+        const xanScorePct = scores.xanScore * 100;
+        const finalScorePct = scores.finalScore * 100;
+        const tier = tierForFinalScore(finalScorePct);
+
+        if (['S', 'A', 'B', 'C', 'D'].includes(desiredTier) && tier !== desiredTier) {
+            continue;
+        }
+
+        const result = buildResult(id, profileData, scores, period, ps, counter);
+
+        // Fetch names only for the chosen player
+        result.factionName = result._factionId
+            ? await fetchFactionName(result._factionId, apiKey, counter)
+            : null;
+        result.companyName = result._companyNameFromProfile ?? (result._companyId
+            ? await fetchCompanyName(result._companyId, apiKey, counter)
+            : null);
+
+        delete result._factionId;
+        delete result._companyId;
+        delete result._companyNameFromProfile;
+
+        result.tornApiCallsUsed = counter.value;
+        return result;
+    }
+
+    throw buildNoPlayerFoundError(runStats, { maxTries, activeWithinHours, desiredTier }, counter);
+}
+
+module.exports = {
+    getRandomActiveRankedPlayer,
+};

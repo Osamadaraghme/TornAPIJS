@@ -7,7 +7,7 @@
  *   $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
  */
 
-const { getRandomActiveRankedPlayer } = require('./src/active-ranked-random-player.js');
+const { getRandomActiveRankedPlayer } = require('./src/services/active-ranked-player.js');
 
 const apiKey = process.env.TORN_API_KEY;
 if (!apiKey) {

@@ -2,6 +2,15 @@
 
 Simple JS helpers for the [Torn City](https://www.torn.com) API — get a player's level by ID.
 
+### Project structure (refactored)
+
+- **`src/constants.js`** — API URL, error messages, fatal error codes.
+- **`src/api/torn-client.js`** — Low-level Torn API (fetch user, faction, company); no business logic.
+- **`src/utils/`** — Helpers: `extractors.js` (profile/stats fields), `scoring.js` (xanax score & tier), `errors.js` (Torn errors & “no player found” messages), `helpers.js` (e.g. randomIntInclusive).
+- **`src/services/`** — Use cases: `player-level.js`, `random-player.js`, `active-ranked-player.js`. Each uses the API client and utils.
+- **`run.js`**, **`run-random.js`**, **`run-active-ranked.js`** — CLI entry points (require the services above).
+- **`src/torn-api.js`**, **`src/random-player.js`**, **`src/active-ranked-random-player.js`** — Legacy re-exports; prefer `src/services/*` or `src/index.js`.
+
 ---
 
 ## How to run
@@ -44,7 +53,7 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — get a player
 
 ## Random active player + tier scoring (S/A/B/C/D)
 
-**Files:** `src/active-ranked-random-player.js`, `run-active-ranked.js`
+**Files:** `src/services/active-ranked-player.js`, `run-active-ranked.js`
 
 Returns a random player who has been active in the last X hours. Response includes:
 - **playerId**, **name**, **level**

@@ -2,7 +2,7 @@
  * Run from project folder: node run.js [playerId]
  * Set your API key: set TORN_API_KEY=your_key (Windows) or TORN_API_KEY=your_key node run.js [playerId] (any OS)
  */
-const { getPlayerLevel } = require('./src/torn-api.js');
+const { getPlayerLevel } = require('./src/services/player-level.js');
 
 const playerId = process.argv[2] || '1';
 const apiKey = process.env.TORN_API_KEY;
