@@ -55,6 +55,7 @@ Returns a random player who has been active in the last X hours. Response includ
 - **factionName** (string or null) — name of the player's faction, if any
 - **companyName** (string or null) — name of the player's company/job, if any
 - **hoursSinceLastAction**, xanax averages, **statsAvailable**, **periodUsed**
+- **tornApiCallsUsed** (number) — how many Torn API requests were made for this run (useful for staying under the 100/min limit)
 
 Run (PowerShell):
 
@@ -114,6 +115,23 @@ $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month A
 # Factionless, no company
 $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL N N
 ```
+
+### API call count
+
+Every successful response includes **tornApiCallsUsed**: the number of requests made to Torn’s API for that run. Typical runs use about 2–4 calls when a player is found quickly; each extra “try” (random ID checked) adds 1–2 calls. Torn allows 100 calls per minute per user, so you can gauge how often you can run the script.
+
+### Errors
+
+The script returns clear errors instead of a single generic message:
+
+- **No API key** — `Torn API key is required.`
+- **Invalid key / rate limit / IP block / key paused** — If Torn returns a fatal error (empty key, wrong key, too many requests, IP block, API disabled, key in jail, key paused), the script throws immediately with Torn’s error message so you don’t burn through all tries.
+- **Every request failed** — e.g. `Every Torn API request failed (120 attempts). Check your API key...`
+- **No one active** — e.g. `No players were active in the last 24 hours after 50 profile checks (50 API calls). Try increasing activeWithinHours or maxTries.`
+- **No match for tier** — e.g. `No active player matched your tier filter (S) after 30 candidates (65 API calls). Try a different tier or increase maxTries.`
+- **No match for filters** — e.g. `Could not find an active player matching your filters (last 24h, 120 tries, 122 API calls). Try increasing maxTries or relaxing tier/faction/company filters.`
+
+See [Torn API docs](https://www.torn.com/api.html) for full error codes (e.g. 2 = wrong key, 5 = rate limit, 7 = private data).
 
 Note: If Torn API does not allow `personalstats` for the chosen player, scores will be `0` and the player will rank `D` with `statsAvailable: false`.
 

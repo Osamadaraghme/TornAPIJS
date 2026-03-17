@@ -15,6 +15,36 @@
 const API_BASE = 'https://api.torn.com';
 const AVG_DAYS_PER_MONTH = 30.4375;
 
+/** Torn API error code → user-facing message (see https://www.torn.com/api.html) */
+const TORN_ERROR_MESSAGES = {
+    0: 'Torn API returned an unknown error.',
+    1: 'API key is empty. Set TORN_API_KEY or pass a valid key.',
+    2: 'Invalid API key or wrong format. Check your key at Torn Preferences → API.',
+    3: 'Wrong request type sent to Torn API.',
+    4: 'Invalid API selection or fields requested.',
+    5: 'Too many requests: Torn allows 100 calls per minute. Wait a moment and try again.',
+    6: 'Invalid ID in request (e.g. user/faction/company does not exist).',
+    7: 'Access denied: this data is private to the key owner or entity.',
+    8: 'Your IP is temporarily blocked by Torn for too many invalid requests.',
+    9: 'Torn API is temporarily disabled.',
+    10: 'Key owner is in federal jail; API cannot be used until released.',
+    16: 'API key access level is too low for this selection. Use a key with higher access.',
+    17: 'Torn backend error. Try again later.',
+    18: 'API key has been paused by the owner. Unpause it in Torn Preferences → API.',
+};
+
+/** Error codes after which we should stop immediately (no point retrying). */
+const TORN_FATAL_ERROR_CODES = new Set([1, 2, 5, 8, 9, 10, 18]);
+
+function messageForTornError(errorPayload) {
+    if (!errorPayload) return null;
+    const code = errorPayload.code ?? errorPayload.error_code ?? null;
+    const msg = errorPayload.error ?? errorPayload.message ?? null;
+    if (code != null && TORN_ERROR_MESSAGES[code]) return TORN_ERROR_MESSAGES[code];
+    if (typeof msg === 'string') return msg;
+    return code != null ? `Torn API error (code ${code}).` : 'Torn API returned an error.';
+}
+
 function randomIntInclusive(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -80,8 +110,9 @@ function extractCompanyNameFromProfile(profileData) {
     return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
-async function fetchFactionName(factionId, apiKey) {
+async function fetchFactionName(factionId, apiKey, counter) {
     try {
+        if (counter) counter.value++;
         const url = `${API_BASE}/faction/${factionId}?selections=basic&key=${apiKey}`;
         const res = await fetch(url);
         const data = await res.json();
@@ -93,8 +124,9 @@ async function fetchFactionName(factionId, apiKey) {
     }
 }
 
-async function fetchCompanyName(companyId, apiKey) {
+async function fetchCompanyName(companyId, apiKey, counter) {
     try {
+        if (counter) counter.value++;
         const url = `${API_BASE}/company/${companyId}?selections=profile&key=${apiKey}`;
         const res = await fetch(url);
         const data = await res.json();
@@ -165,7 +197,8 @@ function tierForFinalScore(finalScore0to100) {
     return 'D';
 }
 
-async function fetchUser(id, selections, apiKey) {
+async function fetchUser(id, selections, apiKey, counter) {
+    if (counter) counter.value++;
     const url = `${API_BASE}/user/${id}?selections=${encodeURIComponent(selections)}&key=${apiKey}`;
     const res = await fetch(url);
     return res.json();
@@ -187,7 +220,7 @@ async function fetchUser(id, selections, apiKey) {
  * @returns {Promise<{playerId:number,name:string|null,level:number|null,hasFaction:boolean,hasCompany:boolean,factionName:string|null,companyName:string|null,hoursSinceLastAction:number,xanScore:number,tier:"S"|"A"|"B"|"C"|"D",statsAvailable:boolean,periodUsed:"day"|"month"}>}
  */
 async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
-    if (!apiKey) throw new Error('Torn API key is required');
+    if (!apiKey) throw new Error('Torn API key is required.');
 
     const activeWithinHours = Number.isFinite(opts.activeWithinHours) ? opts.activeWithinHours : 24;
     const minId = Number.isFinite(opts.minId) ? opts.minId : 1;
@@ -201,17 +234,48 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
     const factionFilter = factionFilterRaw.toUpperCase();
     const companyFilter = companyFilterRaw.toUpperCase();
 
+    const counter = { value: 0 };
+    const runStats = { profilesOk: 0, activeCount: 0, passedFiltersCount: 0, lastTornError: null };
+
     const nowSeconds = Math.floor(Date.now() / 1000);
     const cutoff = nowSeconds - Math.floor(activeWithinHours * 3600);
+
+    function throwNoPlayerFound() {
+        const { profilesOk, activeCount, passedFiltersCount, lastTornError } = runStats;
+        const lastMsg = lastTornError ? ` Last Torn error: ${lastTornError}` : '';
+        if (profilesOk === 0) {
+            const hint = lastTornError || 'Check your API key and that it has access to user profile.';
+            throw new Error(`Every Torn API request failed (${maxTries} attempts). ${hint}`);
+        }
+        if (activeCount === 0) {
+            throw new Error(`No players were active in the last ${activeWithinHours} hours after ${profilesOk} profile checks (${counter.value} API calls). Try increasing activeWithinHours or maxTries.${lastMsg}`);
+        }
+        if (passedFiltersCount > 0 && desiredTier !== 'ALL') {
+            throw new Error(`No active player matched your tier filter (${desiredTier}) after ${passedFiltersCount} candidates (${counter.value} API calls). Try a different tier or increase maxTries.${lastMsg}`);
+        }
+        if (passedFiltersCount > 0) {
+            throw new Error(`No matching active player after ${passedFiltersCount} candidates (${counter.value} API calls). Try increasing maxTries or relaxing faction/company filters.${lastMsg}`);
+        }
+        throw new Error(`Could not find an active player matching your filters (last ${activeWithinHours}h, ${maxTries} tries, ${counter.value} API calls). Try increasing maxTries or relaxing tier/faction/company filters.${lastMsg}`);
+    }
 
     for (let i = 0; i < maxTries; i++) {
         const id = randomIntInclusive(minId, maxId);
 
-        const profileData = await fetchUser(id, 'profile', apiKey);
-        if (profileData?.error) continue;
+        const profileData = await fetchUser(id, 'profile', apiKey, counter);
+        if (profileData?.error) {
+            runStats.lastTornError = messageForTornError(profileData.error);
+            const code = profileData.error?.code ?? profileData.error?.error_code;
+            if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
+                throw new Error(runStats.lastTornError || `Torn API error (code ${code}).`);
+            }
+            continue;
+        }
+        runStats.profilesOk++;
 
         const lastActionTs = extractLastActionTimestampSeconds(profileData);
         if (!lastActionTs || lastActionTs < cutoff) continue;
+        runStats.activeCount++;
 
         const name = extractName(profileData);
         const level = extractLevel(profileData);
@@ -222,23 +286,25 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
 
         if (factionFilter === 'Y' && !hasFaction) continue;
         if (factionFilter === 'N' && hasFaction) continue;
-
         if (companyFilter === 'Y' && !hasCompany) continue;
         if (companyFilter === 'N' && hasCompany) continue;
 
+        runStats.passedFiltersCount++;
+
         let personalstatsData = null;
         try {
-            personalstatsData = await fetchUser(id, 'personalstats', apiKey);
+            personalstatsData = await fetchUser(id, 'personalstats', apiKey, counter);
         } catch {
             personalstatsData = null;
         }
+        if (personalstatsData?.error) {
+            runStats.lastTornError = messageForTornError(personalstatsData.error);
+        }
 
-        // API usually returns { personalstats: { ... } } – unwrap that if present.
         const ps = personalstatsData && !personalstatsData.error
             ? (personalstatsData.personalstats || personalstatsData)
             : null;
 
-        // If personalstats isn't accessible, we still return tier D with 0 scores (explicitly flagged).
         const xanTaken = ps ? extractXanaxTaken(ps) : null;
 
         const scores = computeScores({
@@ -247,24 +313,20 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
             period
         });
 
-        // Convert internal 0–1 scores to 0–100 for output & tiering.
         const xanScorePct = scores.xanScore * 100;
         const finalScorePct = scores.finalScore * 100;
-
         const tier = tierForFinalScore(finalScorePct);
 
-        // If a specific tier is requested (not ALL) and this player doesn't match, keep searching.
         if (['S', 'A', 'B', 'C', 'D'].includes(desiredTier) && tier !== desiredTier) {
             continue;
         }
 
         const hoursSinceLastAction = (nowSeconds - lastActionTs) / 3600;
-
         const factionId = extractFactionId(profileData);
         const companyId = extractCompanyId(profileData);
-        const factionName = factionId ? await fetchFactionName(factionId, apiKey) : null;
+        const factionName = factionId ? await fetchFactionName(factionId, apiKey, counter) : null;
         const companyNameFromProfile = extractCompanyNameFromProfile(profileData);
-        const companyName = companyNameFromProfile ?? (companyId ? await fetchCompanyName(companyId, apiKey) : null);
+        const companyName = companyNameFromProfile ?? (companyId ? await fetchCompanyName(companyId, apiKey, counter) : null);
 
         return {
             playerId: Number(id),
@@ -280,11 +342,12 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
             avgXanaxPerDay: scores.avgXanaxPerDay != null ? Number(scores.avgXanaxPerDay.toFixed(4)) : null,
             avgXanaxPerMonth: scores.avgXanaxPerMonth != null ? Number(scores.avgXanaxPerMonth.toFixed(2)) : null,
             statsAvailable: Boolean(scores.statsAvailable) && Boolean(ps),
-            periodUsed: period
+            periodUsed: period,
+            tornApiCallsUsed: counter.value
         };
     }
 
-    throw new Error(`Could not find an active player (last ${activeWithinHours}h) after ${maxTries} tries. Try increasing maxTries or adjusting maxId.`);
+    throwNoPlayerFound();
 }
 
 if (typeof module !== 'undefined' && module.exports) {

@@ -31,6 +31,7 @@ getRandomActiveRankedPlayer(apiKey, { activeWithinHours, minId, maxId, maxTries,
     })
     .catch((err) => {
         console.error(err?.message || err);
-        process.exit(1);
+        // Brief delay before exit so Node can close in-flight fetch handles (avoids libuv assertion on Windows).
+        setTimeout(() => process.exit(1), 100);
     });
 
