@@ -19,7 +19,7 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — get a player
 ### Option B: From the command line (Node.js)
 
 1. Install [Node.js](https://nodejs.org/) (v18+).
-2. Get your API key from [Torn Preferences → API](https://www.torn.com/preferences.php#tab=api).
+2. Get a **public** API key from [Torn Preferences → API](https://www.torn.com/preferences.php#tab=api).
 3. In the project folder, run:
 
    **Windows (PowerShell):**
@@ -39,6 +39,83 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — get a player
    ```
 
    Replace `12345` with any Torn player ID. Omit the ID to test with player ID `1`.
+
+---
+
+## Random active player + tier scoring (S/A/B/C/D)
+
+**Files:** `src/active-ranked-random-player.js`, `run-active-ranked.js`
+
+Returns a random player who has been active in the last X hours. Response includes:
+- **playerId**, **name**, **level**
+- **xanScore** (0–100, based on xanax usage)
+- **tier** (S/A/B/C/D)
+- **hasFaction** (true/false) — whether the player is in a faction
+- **hasCompany** (true/false) — whether the player has a job/company
+- **factionName** (string or null) — name of the player's faction, if any
+- **companyName** (string or null) — name of the player's company/job, if any
+- **hoursSinceLastAction**, xanax averages, **statsAvailable**, **periodUsed**
+
+Run (PowerShell):
+
+```powershell
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js
+```
+
+Optional args (all positional):
+
+```text
+ACTIVE_HOURS  MIN_ID  MAX_ID  MAX_TRIES  PERIOD(day|month)  TIER  HAS_FACTION  HAS_COMPANY
+```
+
+- **ACTIVE_HOURS**: how many hours back to consider someone “active”.  
+  Example: `24` = active in the last 24 hours.
+- **MIN_ID**: lowest user ID to try when picking random players (usually `1`).
+- **MAX_ID**: highest user ID to try (e.g. `3000000`).
+- **MAX_TRIES**: maximum random attempts before giving up (e.g. `120`).  
+  Higher value = more time trying to find a matching player.
+- **PERIOD**: `"day"` or `"month"` — controls how xanax usage is normalised.
+- **TIER**: `"S"|"A"|"B"|"C"|"D"|"ALL"` (not case-sensitive). `"ALL"` = ignore tier.
+- **HAS_FACTION**: `Y` = only in a faction, `N` = only factionless, `ANY` or omit = don't care (case-insensitive).
+- **HAS_COMPANY**: `Y` = only with a job/company, `N` = only without, `ANY` or omit = don't care (case-insensitive).
+
+```powershell
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
+```
+
+### Tier filter
+
+```powershell
+# Any active player, ignore tiers
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month ALL
+
+# Only S-tier players
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month s
+
+# Only A-tier players
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month A
+```
+
+### Faction and company filters
+
+```powershell
+# Only players in a faction
+$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL Y ANY
+
+# Only factionless players
+$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL N ANY
+
+# Only players with a company/job
+$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY Y
+
+# Only players without a company
+$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY N
+
+# Factionless, no company
+$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL N N
+```
+
+Note: If Torn API does not allow `personalstats` for the chosen player, scores will be `0` and the player will rank `D` with `statsAvailable: false`.
 
 ---
 
