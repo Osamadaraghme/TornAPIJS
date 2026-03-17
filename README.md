@@ -127,7 +127,7 @@ $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month A
 
 ### API call count
 
-Every successful response includes **tornApiCallsUsed**: the number of requests made to Torn’s API for that run. Typical runs use about 2–4 calls when a player is found quickly; each extra “try” (random ID checked) adds 1–2 calls. Torn allows 100 calls per minute per user, so you can gauge how often you can run the script.
+Every successful response includes **tornApiCallsUsed**: the number of requests made to Torn’s API for that run. To minimize calls, each try uses one combined user request (profile + personalstats). Typical run: each extra “try” (random ID checked) adds 1 call per try; only the chosen player gets 0–2 extra calls for faction/company names. Torn allows 100 calls per minute per user, so you can gauge how often you can run the script.
 
 ### Errors
 

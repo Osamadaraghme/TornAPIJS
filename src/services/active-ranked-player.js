@@ -2,6 +2,10 @@
  * Service: random ACTIVE player with xanax-based tier (S/A/B/C/D).
  * Finds a player active in the last N hours, applies optional faction/company/tier filters,
  * computes score and tier, fetches faction/company names, returns result + API call count.
+ *
+ * API call minimization: we request profile + personalstats in a single user request
+ * (one call per try instead of two when we need both). Faction/company names are only
+ * fetched for the final chosen player.
  */
 
 const { fetchUser, fetchFactionName, fetchCompanyName } = require('../api/torn-client.js');
@@ -118,14 +122,17 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
     const nowSeconds = Math.floor(Date.now() / 1000);
     const cutoff = nowSeconds - Math.floor(activeWithinHours * 3600);
 
+    // Single request per try: profile + personalstats (saves 1 API call per run vs. separate calls)
+    const USER_SELECTIONS = 'profile,personalstats';
+
     for (let i = 0; i < maxTries; i++) {
         const id = randomIntInclusive(minId, maxId);
 
-        const profileData = await fetchUser(id, 'profile', apiKey, counter);
+        const data = await fetchUser(id, USER_SELECTIONS, apiKey, counter);
 
-        if (profileData?.error) {
-            runStats.lastTornError = messageForTornError(profileData.error);
-            const code = profileData.error?.code ?? profileData.error?.error_code;
+        if (data?.error) {
+            runStats.lastTornError = messageForTornError(data.error);
+            const code = data.error?.code ?? data.error?.error_code;
             if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
                 throw new Error(runStats.lastTornError || `Torn API error (code ${code}).`);
             }
@@ -133,6 +140,7 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         }
         runStats.profilesOk++;
 
+        const profileData = data.profile != null ? data.profile : data;
         const lastActionTs = extractLastActionTimestampSeconds(profileData);
         if (!lastActionTs || lastActionTs < cutoff) continue;
         runStats.activeCount++;
@@ -140,18 +148,8 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         if (!passesFactionCompanyFilters(profileData, factionFilter, companyFilter)) continue;
         runStats.passedFiltersCount++;
 
-        let personalstatsData = null;
-        try {
-            personalstatsData = await fetchUser(id, 'personalstats', apiKey, counter);
-        } catch {
-            personalstatsData = null;
-        }
-        if (personalstatsData?.error) {
-            runStats.lastTornError = messageForTornError(personalstatsData.error);
-        }
-
-        const ps = personalstatsData && !personalstatsData.error
-            ? (personalstatsData.personalstats || personalstatsData)
+        const ps = data?.personalstats != null
+            ? (data.personalstats.personalstats ?? data.personalstats)
             : null;
         const xanTaken = ps ? extractXanaxTaken(ps) : null;
         const ageDays = extractAgeDays(profileData);

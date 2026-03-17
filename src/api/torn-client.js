@@ -8,6 +8,7 @@ const { API_BASE } = require('../constants.js');
 
 /**
  * Fetch a user selection from Torn (profile, personalstats, etc.).
+ * Multiple selections (e.g. "profile,personalstats") count as one API call.
  * @param {number|string} id - User ID
  * @param {string} selections - Comma-separated selection names
  * @param {string} apiKey - Torn API key

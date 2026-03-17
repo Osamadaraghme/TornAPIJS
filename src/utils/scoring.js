@@ -56,10 +56,10 @@ function computeScores({ xanaxTakenTotal, ageDays, period }) {
  * @returns {'S'|'A'|'B'|'C'|'D'}
  */
 function tierForFinalScore(finalScore0to100) {
-    if (finalScore0to100 >= 90) return 'S';
-    if (finalScore0to100 >= 75) return 'A';
-    if (finalScore0to100 >= 60) return 'B';
-    if (finalScore0to100 >= 40) return 'C';
+    if (finalScore0to100 >= 75) return 'S';
+    if (finalScore0to100 >= 60) return 'A';
+    if (finalScore0to100 >= 40) return 'B';
+    if (finalScore0to100 >= 25) return 'C';
     return 'D';
 }
 
