@@ -38,7 +38,7 @@ function buildNoPlayerFoundError(runStats, opts, counter) {
         return new Error(`No players were active in the last ${activeWithinHours} hours after ${profilesOk} profile checks (${counter.value} API calls). Try increasing activeWithinHours or maxTries.${lastMsg}`);
     }
     if (passedFiltersCount > 0 && desiredTier !== 'ALL') {
-        return new Error(`No active player matched your tier filter (${desiredTier}) after ${passedFiltersCount} candidates (${counter.value} API calls). Try a different tier or increase maxTries.${lastMsg}`);
+        return new Error(`No active player matched your tier filter (${desiredTier} or higher) after ${passedFiltersCount} candidates (${counter.value} API calls). Try a lower tier or increase maxTries.${lastMsg}`);
     }
     if (passedFiltersCount > 0) {
         return new Error(`No matching active player after ${passedFiltersCount} candidates (${counter.value} API calls). Try increasing maxTries or relaxing faction/company filters.${lastMsg}`);

@@ -1,9 +1,9 @@
 /**
  * Xanax-based scoring and tier (S/A/B/C/D) logic.
- * Formula: XanScore = min((avg xanax per day)/4, 1) * 100; tier from score.
+ * Formula: XanScore = min((avg xanax per day) / XANAX_PER_DAY_FOR_FULL_SCORE, 1) * 100; tier from score.
  */
 
-const { AVG_DAYS_PER_MONTH } = require('../constants.js');
+const { AVG_DAYS_PER_MONTH, XANAX_PER_DAY_FOR_FULL_SCORE } = require('../constants.js');
 
 function clamp01(x) {
     if (x <= 0) return 0;
@@ -31,7 +31,7 @@ function computeScores({ xanaxTakenTotal, ageDays, period }) {
 
     const avgXanPerDay = Number.isFinite(xanaxTakenTotal) ? (xanaxTakenTotal / safeAgeDays) : null;
     const usingMonth = period === 'month';
-    const xanDenom = usingMonth ? (4 * AVG_DAYS_PER_MONTH) : 4;
+    const xanDenom = usingMonth ? (XANAX_PER_DAY_FOR_FULL_SCORE * AVG_DAYS_PER_MONTH) : XANAX_PER_DAY_FOR_FULL_SCORE;
     const avgXanPeriod = avgXanPerDay == null ? null : (usingMonth ? (avgXanPerDay * AVG_DAYS_PER_MONTH) : avgXanPerDay);
     const avgXanPerMonth = avgXanPerDay == null ? null : avgXanPerDay * AVG_DAYS_PER_MONTH;
 
@@ -63,7 +63,23 @@ function tierForFinalScore(finalScore0to100) {
     return 'D';
 }
 
+/** Tier order for "or higher" filter: S > A > B > C > D */
+const TIER_RANK = { S: 4, A: 3, B: 2, C: 1, D: 0 };
+
+/**
+ * True if playerTier is the same or better than minTier (e.g. B is at or above C).
+ * @param {string} playerTier - Player's tier (S/A/B/C/D)
+ * @param {string} minTier - Minimum tier requested (S/A/B/C/D)
+ */
+function isTierAtOrAbove(playerTier, minTier) {
+    const p = TIER_RANK[String(playerTier).toUpperCase()];
+    const m = TIER_RANK[String(minTier).toUpperCase()];
+    if (p == null || m == null) return false;
+    return p >= m;
+}
+
 module.exports = {
     computeScores,
     tierForFinalScore,
+    isTierAtOrAbove,
 };

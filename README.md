@@ -85,7 +85,7 @@ ACTIVE_HOURS  MIN_ID  MAX_ID  MAX_TRIES  PERIOD(day|month)  TIER  HAS_FACTION  H
 - **MAX_TRIES**: maximum random attempts before giving up (e.g. `120`).  
   Higher value = more time trying to find a matching player.
 - **PERIOD**: `"day"` or `"month"` — controls how xanax usage is normalised.
-- **TIER**: `"S"|"A"|"B"|"C"|"D"|"ALL"` (not case-sensitive). `"ALL"` = ignore tier.
+- **TIER**: `"S"|"A"|"B"|"C"|"D"|"ALL"` (not case-sensitive). Returns a player at **this tier or higher** (e.g. `C` = C, B, A, or S; `S` = S only). `"ALL"` = ignore tier.
 - **HAS_FACTION**: `Y` = only in a faction, `N` = only factionless, `ANY` or omit = don't care (case-insensitive).
 - **HAS_COMPANY**: `Y` = only with a job/company, `N` = only without, `ANY` or omit = don't care (case-insensitive).
 
@@ -95,15 +95,20 @@ $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000
 
 ### Tier filter
 
+TIER means **this tier or higher**: e.g. `C` returns a player who is C, B, A, or S; `B` returns B, A, or S; `S` returns S only.
+
 ```powershell
 # Any active player, ignore tiers
 $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month ALL
 
-# Only S-tier players
+# S-tier only (highest)
 $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month s
 
-# Only A-tier players
+# A-tier or higher (A or S)
 $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month A
+
+# C-tier or higher (C, B, A, or S)
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month C
 ```
 
 ### Faction and company filters

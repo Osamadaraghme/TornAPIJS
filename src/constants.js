@@ -9,6 +9,9 @@ const API_BASE = 'https://api.torn.com';
 /** Average days per month used for xanax scoring when period is "month". */
 const AVG_DAYS_PER_MONTH = 30.4375;
 
+/** Lifetime avg xanax per day that gives 100% score (softer = lower value). */
+const XANAX_PER_DAY_FOR_FULL_SCORE = 3.25;
+
 /**
  * Torn API error code → human-readable message.
  * @see https://www.torn.com/api.html
@@ -36,6 +39,7 @@ const TORN_FATAL_ERROR_CODES = new Set([1, 2, 5, 8, 9, 10, 18]);
 module.exports = {
     API_BASE,
     AVG_DAYS_PER_MONTH,
+    XANAX_PER_DAY_FOR_FULL_SCORE,
     TORN_ERROR_MESSAGES,
     TORN_FATAL_ERROR_CODES,
 };

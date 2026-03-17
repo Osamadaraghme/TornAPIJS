@@ -21,7 +21,7 @@ const {
     extractCompanyNameFromProfile,
     extractXanaxTaken,
 } = require('../utils/extractors.js');
-const { computeScores, tierForFinalScore } = require('../utils/scoring.js');
+const { computeScores, tierForFinalScore, isTierAtOrAbove } = require('../utils/scoring.js');
 const { messageForTornError, buildNoPlayerFoundError, TORN_FATAL_ERROR_CODES } = require('../utils/errors.js');
 const { randomIntInclusive } = require('../utils/helpers.js');
 
@@ -164,7 +164,7 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         const finalScorePct = scores.finalScore * 100;
         const tier = tierForFinalScore(finalScorePct);
 
-        if (['S', 'A', 'B', 'C', 'D'].includes(desiredTier) && tier !== desiredTier) {
+        if (['S', 'A', 'B', 'C', 'D'].includes(desiredTier) && !isTierAtOrAbove(tier, desiredTier)) {
             continue;
         }
 
