@@ -71,6 +71,15 @@ function extractCompanyId(profileData) {
     return cid != null && Number(cid) > 0 ? Number(cid) : null;
 }
 
+/** Try to get company name from user profile/job (avoids company endpoint which may be restricted). */
+function extractCompanyNameFromProfile(profileData) {
+    const job = profileData?.job ?? profileData?.profile?.job ?? null;
+    if (job && typeof job === 'string' && job.length > 0) return job;
+    if (!job || typeof job !== 'object') return null;
+    const name = job.company_name ?? job.company_name_short ?? job.company ?? job.name ?? job.position ?? job.job_title ?? job.title ?? null;
+    return typeof name === 'string' && name.length > 0 ? name : null;
+}
+
 async function fetchFactionName(factionId, apiKey) {
     try {
         const url = `${API_BASE}/faction/${factionId}?selections=basic&key=${apiKey}`;
@@ -90,7 +99,7 @@ async function fetchCompanyName(companyId, apiKey) {
         const res = await fetch(url);
         const data = await res.json();
         if (data?.error) return null;
-        const name = data?.name ?? data?.profile?.name ?? data?.company_name ?? null;
+        const name = data?.name ?? data?.profile?.name ?? data?.company_name ?? data?.profile?.company_name ?? null;
         return typeof name === 'string' ? name : null;
     } catch {
         return null;
@@ -254,7 +263,8 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         const factionId = extractFactionId(profileData);
         const companyId = extractCompanyId(profileData);
         const factionName = factionId ? await fetchFactionName(factionId, apiKey) : null;
-        const companyName = companyId ? await fetchCompanyName(companyId, apiKey) : null;
+        const companyNameFromProfile = extractCompanyNameFromProfile(profileData);
+        const companyName = companyNameFromProfile ?? (companyId ? await fetchCompanyName(companyId, apiKey) : null);
 
         return {
             playerId: Number(id),
