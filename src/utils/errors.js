@@ -2,7 +2,7 @@
  * Torn API error handling and user-facing "no player found" messages.
  */
 
-const { TORN_ERROR_MESSAGES, TORN_FATAL_ERROR_CODES } = require('../constants.js');
+const { TORN_ERROR_MESSAGES } = require('../constants.js');
 
 /**
  * Human-readable message for a Torn API error payload.
@@ -49,5 +49,4 @@ function buildNoPlayerFoundError(runStats, opts, counter) {
 module.exports = {
     messageForTornError,
     buildNoPlayerFoundError,
-    TORN_FATAL_ERROR_CODES,
 };

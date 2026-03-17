@@ -5,11 +5,12 @@
 
 /**
  * Last action timestamp (seconds since epoch). Handles multiple response shapes.
- * @param {object} profileData - User profile response
+ * @param {object} profileData - User profile response (or full response with profile nested)
  * @returns {number|null}
  */
 function extractLastActionTimestampSeconds(profileData) {
-    const la = profileData?.last_action;
+    const p = profileData?.profile ?? profileData;
+    const la = p?.last_action;
     if (typeof la === 'number') return la;
     if (typeof la?.timestamp === 'number') return la.timestamp;
     if (typeof la?.time === 'number') return la.time;
@@ -29,9 +30,10 @@ function extractName(data) {
     return typeof name === 'string' ? name : null;
 }
 
-/** @param {object} profileData - User profile */
+/** @param {object} profileData - User profile (or full response with profile nested) */
 function extractAgeDays(profileData) {
-    const age = profileData?.age ?? null;
+    const p = profileData?.profile ?? profileData;
+    const age = p?.age ?? null;
     return age != null ? Number(age) : null;
 }
 

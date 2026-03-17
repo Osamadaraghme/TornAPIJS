@@ -21,12 +21,15 @@ const {
     extractCompanyNameFromProfile,
     extractXanaxTaken,
 } = require('../utils/extractors.js');
-const { computeScores, tierForFinalScore, isTierAtOrAbove } = require('../utils/scoring.js');
-const { messageForTornError, buildNoPlayerFoundError, TORN_FATAL_ERROR_CODES } = require('../utils/errors.js');
+const { computeScores, tierForFinalScore, isTierAtOrAbove, VALID_TIERS } = require('../utils/scoring.js');
+const { messageForTornError, buildNoPlayerFoundError } = require('../utils/errors.js');
+const { TORN_FATAL_ERROR_CODES } = require('../constants.js');
 const { randomIntInclusive } = require('../utils/helpers.js');
 
 /**
  * Normalise and validate options; return a single options object.
+ * @param {object} opts - Raw options (activeWithinHours, minId, maxId, maxTries, period, tier, hasFaction, hasCompany)
+ * @returns {object} Normalised options with defaults applied
  */
 function parseOptions(opts) {
     return {
@@ -56,6 +59,13 @@ function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) 
 
 /**
  * Build the success response object for one matched player.
+ * @param {number} id - Player ID
+ * @param {object} profileData - Normalised profile from API
+ * @param {object} scores - Output from computeScores
+ * @param {string} period - 'day' or 'month'
+ * @param {object|null} ps - Personal stats object (or null)
+ * @param {{ value: number }} counter - API call counter
+ * @returns {object} Result shape; factionName/companyName filled by caller
  */
 function buildResult(id, profileData, scores, period, ps, counter) {
     const name = extractName(profileData);
@@ -164,7 +174,7 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         const finalScorePct = scores.finalScore * 100;
         const tier = tierForFinalScore(finalScorePct);
 
-        if (['S', 'A', 'B', 'C', 'D'].includes(desiredTier) && !isTierAtOrAbove(tier, desiredTier)) {
+        if (VALID_TIERS.includes(desiredTier) && !isTierAtOrAbove(tier, desiredTier)) {
             continue;
         }
 

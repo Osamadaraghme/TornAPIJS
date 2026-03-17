@@ -5,6 +5,7 @@
 
 const { AVG_DAYS_PER_MONTH, XANAX_PER_DAY_FOR_FULL_SCORE } = require('../constants.js');
 
+/** Clamp a number to [0, 1]. */
 function clamp01(x) {
     if (x <= 0) return 0;
     if (x >= 1) return 1;
@@ -63,8 +64,11 @@ function tierForFinalScore(finalScore0to100) {
     return 'D';
 }
 
-/** Tier order for "or higher" filter: S > A > B > C > D */
+/** Tier order for "or higher" filter: S > A > B > C > D. */
 const TIER_RANK = { S: 4, A: 3, B: 2, C: 1, D: 0 };
+
+/** Valid tier filter values (excluding ALL). */
+const VALID_TIERS = Object.keys(TIER_RANK);
 
 /**
  * True if playerTier is the same or better than minTier (e.g. B is at or above C).
@@ -82,4 +86,5 @@ module.exports = {
     computeScores,
     tierForFinalScore,
     isTierAtOrAbove,
+    VALID_TIERS,
 };
