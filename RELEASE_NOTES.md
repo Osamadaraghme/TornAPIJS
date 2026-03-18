@@ -1,5 +1,23 @@
 # Release notes
 
+## v1.0.2
+
+**Release date:** 2026
+
+### Changes since v1.0.1
+
+| Area | v1.0.1 | v1.0.2 |
+|------|--------|--------|
+| **Active ranked API** | Only random probing (`active-ranked-player`) to find a matching active player. | Added `active-ranked-player-by-id` so you can score a specific `playerId` directly (no random probing). |
+| **Xanax score (100%)** | 100% score at **3.25** lifetime avg xanax per day. | 100% score at **3** lifetime avg xanax per day. |
+
+### Summary
+
+- **New recruitment helper:** use `run-active-ranked-by-id.js` / `getActiveRankedPlayerById(playerId)` when you already have an ID.
+- **Softer scoring:** lowered the full xanax score bar from 3.25 to 3 xanax/day, producing higher numeric scores and tiers for the same usage.
+
+---
+
 ## v1.0.1
 
 **Release date:** 2025

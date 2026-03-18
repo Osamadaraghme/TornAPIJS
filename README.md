@@ -26,7 +26,7 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — find recruit
 
 Returns a random player who has been active in the last X hours. Response includes:
 - **playerId**, **name**, **level**
-- **xanScore** (0–100, based on xanax usage)
+- **xanScore** (0–100; based on lifetime avg xanax usage; 100% at ~3 xanax/day)
 - **tier** (S/A/B/C/D)
 - **hasFaction** (true/false) — whether the player is in a faction
 - **hasCompany** (true/false) — whether the player has a job/company
@@ -145,5 +145,29 @@ See [Torn API docs](https://www.torn.com/api.html) for full error codes (e.g. 2 
 
 Note: If Torn API does not allow `personalstats` for the chosen player, scores will be `0` and the player will rank `D` with `statsAvailable: false`.
 
+---
+
+## Active ranked player by ID (no random probing)
+
+If you already have a `playerId` (for recruitment), this endpoint returns the same response shape as the random active-ranked API, but for that exact ID.
+
+**Files:** `src/services/active-ranked-player-by-id.js`, `run-active-ranked-by-id.js`
+
+Run (PowerShell):
+
+```powershell
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked-by-id.js PLAYER_ID
+```
+
+Scoring period:
+- By default the xanax scoring uses `month` normalization.
+- Set `TORN_SCORE_PERIOD=day` to switch to per-day normalization.
+
+Example:
+
+```powershell
+$env:TORN_API_KEY="your_key"; node run-active-ranked-by-id.js 1865163
+```
+
  
-Note: the player-level and random-player proof-of-concepts were removed. Use `run-active-ranked.js` for recruitment scoring.
+Note: this endpoint does not apply activity/tier/faction/company filters; it just calculates and returns the scoring response for the given ID.

@@ -10,7 +10,7 @@ const API_BASE = 'https://api.torn.com';
 const AVG_DAYS_PER_MONTH = 30.4375;
 
 /** Lifetime avg xanax per day that gives 100% score (softer = lower value). */
-const XANAX_PER_DAY_FOR_FULL_SCORE = 3.25;
+const XANAX_PER_DAY_FOR_FULL_SCORE = 3;
 
 /**
  * Torn API error code → human-readable message.

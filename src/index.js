@@ -4,7 +4,9 @@
  */
 
 const { getRandomActiveRankedPlayer } = require('./services/active-ranked-player.js');
+const { getActiveRankedPlayerById } = require('./services/active-ranked-player-by-id.js');
 
 module.exports = {
     getRandomActiveRankedPlayer,
+    getActiveRankedPlayerById,
 };

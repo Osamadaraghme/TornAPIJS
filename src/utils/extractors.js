@@ -105,6 +105,7 @@ function extractXanaxTaken(personalstatsData) {
     return v != null ? Number(v) : null;
 }
 
+// @ts-ignore: project uses CommonJS (`require`/`module.exports`) for runtime compatibility.
 module.exports = {
     extractLastActionTimestampSeconds,
     extractLevel,
