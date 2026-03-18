@@ -12,9 +12,27 @@ function extractLastActionTimestampSeconds(profileData) {
     const p = profileData?.profile ?? profileData;
     const la = p?.last_action;
     if (typeof la === 'number') return la;
+    if (typeof la === 'string' && la.trim() !== '') {
+        const n = Number(la);
+        if (Number.isFinite(n)) return n;
+    }
+
+    // Some Torn responses wrap last_action in an object with multiple numeric fields.
     if (typeof la?.timestamp === 'number') return la.timestamp;
+    if (typeof la?.timestamp === 'string' && la.timestamp.trim() !== '') {
+        const n = Number(la.timestamp);
+        if (Number.isFinite(n)) return n;
+    }
     if (typeof la?.time === 'number') return la.time;
+    if (typeof la?.time === 'string' && la.time.trim() !== '') {
+        const n = Number(la.time);
+        if (Number.isFinite(n)) return n;
+    }
     if (typeof la?.unix === 'number') return la.unix;
+    if (typeof la?.unix === 'string' && la.unix.trim() !== '') {
+        const n = Number(la.unix);
+        if (Number.isFinite(n)) return n;
+    }
     return null;
 }
 
