@@ -7,7 +7,7 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — find recruit
 - **`src/constants.js`** — API URL, error messages, fatal error codes.
 - **`src/api/torn-client.js`** — Low-level Torn API (fetch user, faction, company); no business logic.
 - **`src/utils/`** — Helpers: `extractors.js` (profile/stats fields), `scoring.js` (xanax score & tier), `errors.js` (Torn errors & “no player found” messages), `helpers.js` (e.g. randomIntInclusive).
-- **`src/services/`** — Use cases: `active-ranked-player.js`. Each uses the API client and utils.
+- **`src/services/`** — Use cases: `random-active-ranked-player.js` and `active-ranked-player-by-id.js`. Each uses the API client and utils.
 - **`run-active-ranked.js`** — CLI entry point.
 - Legacy re-exports were removed for the player-level and random-player proof-of-concepts.
 
@@ -22,7 +22,7 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — find recruit
 
 ## Random active player + tier scoring (S/A/B/C/D)
 
-**Files:** `src/services/active-ranked-player.js`, `run-active-ranked.js`
+**Files:** `src/services/random-active-ranked-player.js`, `run-active-ranked.js`
 
 Returns a random player who has been active in the last X hours. Response includes:
 - **playerId**, **name**, **level**
@@ -124,7 +124,7 @@ $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 200 month B
 
 - **Rate limit:** Torn allows 100 API calls/minute. Each “try” is 1 call; a match adds 0–2 for faction/company names. Keep `MAX_TRIES` &lt; 100 per run or add a short delay between runs.
 - **Narrow ID range:** Use a higher `MIN_ID` (e.g. `100000`) to skip very old accounts if you prefer.
-- **Programmatic use:** Require `./src/services/active-ranked-player.js` and call `getRandomActiveRankedPlayer(apiKey, { minLevel: 20, tier: 'B', hasFaction: 'N', ... })` to integrate into your own recruitment script.
+- **Programmatic use:** Require `./src/services/random-active-ranked-player.js` and call `getRandomActiveRankedPlayer(apiKey, { minLevel: 20, tier: 'B', hasFaction: 'N', ... })` to integrate into your own recruitment script.
 
 ### API call count
 
