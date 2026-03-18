@@ -75,7 +75,7 @@ $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js
 Optional args (all positional):
 
 ```text
-ACTIVE_HOURS  MIN_ID  MAX_ID  MAX_TRIES  PERIOD(day|month)  TIER  HAS_FACTION  HAS_COMPANY
+ACTIVE_HOURS  MIN_ID  MAX_ID  MAX_TRIES  PERIOD(day|month)  TIER  HAS_FACTION  HAS_COMPANY  [MIN_LEVEL]
 ```
 
 - **ACTIVE_HOURS**: how many hours back to consider someone “active”.  
@@ -88,6 +88,7 @@ ACTIVE_HOURS  MIN_ID  MAX_ID  MAX_TRIES  PERIOD(day|month)  TIER  HAS_FACTION  H
 - **TIER**: `"S"|"A"|"B"|"C"|"D"|"ALL"` (not case-sensitive). Returns a player at **this tier or higher** (e.g. `C` = C, B, A, or S; `S` = S only). `"ALL"` = ignore tier.
 - **HAS_FACTION**: `Y` = only in a faction, `N` = only factionless, `ANY` or omit = don't care (case-insensitive).
 - **HAS_COMPANY**: `Y` = only with a job/company, `N` = only without, `ANY` or omit = don't care (case-insensitive).
+- **MIN_LEVEL** (optional): only return players with level ≥ this (e.g. `20`). Omit for no minimum.
 
 ```powershell
 $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
@@ -129,6 +130,32 @@ $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month A
 # Factionless, no company
 $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL N N
 ```
+
+### Recruitment use case
+
+The API is well-suited to finding **recruitment candidates**: active players who meet your tier/level/faction criteria.
+
+**Suggested parameters:**
+
+| Goal | Example |
+|------|--------|
+| Factionless, so you can recruit them | `HAS_FACTION=N` |
+| Minimum engagement (tier C or better) | `TIER=C` |
+| Only players level 20+ | Add `MIN_LEVEL=20` as 10th arg |
+| Active in last 12–24h | `ACTIVE_HOURS=24` (or `12`) |
+| More candidates to choose from | Increase `MAX_TRIES` (e.g. `200`) |
+
+**Example — factionless, tier B or higher, level 25+, active in 24h:**
+
+```powershell
+$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 200 month B N ANY 25
+```
+
+**Tips:**
+
+- **Rate limit:** Torn allows 100 API calls/minute. Each “try” is 1 call; a match adds 0–2 for faction/company names. Keep `MAX_TRIES` &lt; 100 per run or add a short delay between runs.
+- **Narrow ID range:** Use a higher `MIN_ID` (e.g. `100000`) to skip very old accounts if you prefer.
+- **Programmatic use:** Require `./src/services/active-ranked-player.js` and call `getRandomActiveRankedPlayer(apiKey, { minLevel: 20, tier: 'B', hasFaction: 'N', ... })` to integrate into your own recruitment script.
 
 ### API call count
 

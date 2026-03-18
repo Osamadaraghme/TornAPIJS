@@ -28,7 +28,7 @@ const { randomIntInclusive } = require('../utils/helpers.js');
 
 /**
  * Normalise and validate options; return a single options object.
- * @param {object} opts - Raw options (activeWithinHours, minId, maxId, maxTries, period, tier, hasFaction, hasCompany)
+ * @param {object} opts - Raw options (activeWithinHours, minId, maxId, maxTries, period, tier, hasFaction, hasCompany, minLevel)
  * @returns {object} Normalised options with defaults applied
  */
 function parseOptions(opts) {
@@ -41,6 +41,7 @@ function parseOptions(opts) {
         desiredTier: (typeof opts.tier === 'string' ? opts.tier : 'ALL').toUpperCase(),
         factionFilter: (typeof opts.hasFaction === 'string' ? opts.hasFaction : 'ANY').toUpperCase(),
         companyFilter: (typeof opts.hasCompany === 'string' ? opts.hasCompany : 'ANY').toUpperCase(),
+        minLevel: Number.isFinite(opts.minLevel) && opts.minLevel >= 0 ? opts.minLevel : null,
     };
 }
 
@@ -124,6 +125,7 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         desiredTier,
         factionFilter,
         companyFilter,
+        minLevel,
     } = parseOptions(opts);
 
     const counter = { value: 0 };
@@ -156,6 +158,11 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         runStats.activeCount++;
 
         if (!passesFactionCompanyFilters(profileData, factionFilter, companyFilter)) continue;
+
+        if (minLevel != null) {
+            const level = extractLevel(profileData);
+            if (level == null || level < minLevel) continue;
+        }
         runStats.passedFiltersCount++;
 
         const ps = data?.personalstats != null
