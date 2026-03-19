@@ -13,13 +13,42 @@ function clamp01(x) {
 }
 
 /**
- * Compute xanax score and averages from lifetime stats and account age.
- * @param {{ xanaxTakenTotal: number|null, ageDays: number|null, period: 'day'|'month' }} opts
+ * Compute xanax score and averages for a given period.
+ *
+ * Behavior:
+ * - If Torn provides a period-specific xanax total in `personalstats`, we use it.
+ * - Otherwise we fall back to the lifetime total divided by account age.
+ *
+ * @param {{ xanaxTakenTotal: number|null, xanaxTakenForPeriod: number|null, ageDays: number|null, period: 'day'|'month', avgXanaxPerDayMultiplier?: number }} opts
  * @returns {{ xanScore: number, finalScore: number, periodUsed: string, avgXanaxPerDay: number|null, avgXanaxPerMonth: number|null, statsAvailable: boolean }}
  */
-function computeScores({ xanaxTakenTotal, ageDays, period }) {
+function computeScores({
+    xanaxTakenTotal,
+    xanaxTakenForPeriod,
+    ageDays,
+    period,
+    avgXanaxPerDayMultiplier = 1,
+}) {
     const safeAgeDays = Number.isFinite(ageDays) && ageDays > 0 ? ageDays : null;
-    if (!safeAgeDays) {
+    const usingMonth = period === 'month';
+
+    let avgXanPerDay = null;
+
+    // If Torn provides a window-specific xanax intake field, prefer it.
+    if (Number.isFinite(xanaxTakenForPeriod)) {
+        avgXanPerDay = usingMonth
+            ? xanaxTakenForPeriod / AVG_DAYS_PER_MONTH
+            : xanaxTakenForPeriod; // assume per-day window
+    } else if (Number.isFinite(xanaxTakenTotal) && safeAgeDays) {
+        // Fallback: lifetime avg per day (original behavior).
+        avgXanPerDay = xanaxTakenTotal / safeAgeDays;
+    }
+
+    if (Number.isFinite(avgXanaxPerDayMultiplier) && avgXanPerDay != null) {
+        avgXanPerDay = avgXanPerDay * avgXanaxPerDayMultiplier;
+    }
+
+    if (avgXanPerDay == null) {
         return {
             xanScore: 0,
             finalScore: 0,
@@ -30,16 +59,12 @@ function computeScores({ xanaxTakenTotal, ageDays, period }) {
         };
     }
 
-    const avgXanPerDay = Number.isFinite(xanaxTakenTotal) ? (xanaxTakenTotal / safeAgeDays) : null;
-    const usingMonth = period === 'month';
-    const xanDenom = usingMonth ? (XANAX_PER_DAY_FOR_FULL_SCORE * AVG_DAYS_PER_MONTH) : XANAX_PER_DAY_FOR_FULL_SCORE;
-    const avgXanPeriod = avgXanPerDay == null ? null : (usingMonth ? (avgXanPerDay * AVG_DAYS_PER_MONTH) : avgXanPerDay);
-    const avgXanPerMonth = avgXanPerDay == null ? null : avgXanPerDay * AVG_DAYS_PER_MONTH;
+    const avgXanPerMonth = avgXanPerDay * AVG_DAYS_PER_MONTH;
 
-    // Scores in 0–1; caller may scale to 0–100
-    const xanScore = avgXanPeriod == null ? 0 : clamp01(avgXanPeriod / xanDenom);
+    // Scores in 0–1; caller may scale to 0–100.
+    const xanScore = clamp01(avgXanPerDay / XANAX_PER_DAY_FOR_FULL_SCORE);
     const finalScore = xanScore;
-    const statsAvailable = avgXanPeriod != null;
+    const statsAvailable = avgXanPerDay != null;
 
     return {
         xanScore,

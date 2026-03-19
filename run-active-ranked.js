@@ -3,6 +3,10 @@
  *   PowerShell: $env:TORN_API_KEY="your_key"; node run-active-ranked.js
  *
  * Optional args: ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL]
+ *
+ * Xanax mode:
+ *   `TORN_XANAX_MODE=fast` (default): low-call recruitment mode (recency-weighted fallback when month window is unavailable).
+ *   `TORN_XANAX_MODE=probe`: disables recency multiplier fallback and uses raw API-derived xanax inputs.
  * Example:
  *   $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
  *   $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month B N ANY 20

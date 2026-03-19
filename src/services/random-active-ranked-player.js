@@ -20,10 +20,11 @@ const {
     extractCompanyId,
     extractCompanyNameFromProfile,
     extractXanaxTaken,
+    extractXanaxTakenForPeriod,
 } = require('../utils/extractors.js');
 const { computeScores, tierForFinalScore, isTierAtOrAbove, VALID_TIERS } = require('../utils/scoring.js');
 const { messageForTornError, buildNoPlayerFoundError } = require('../utils/errors.js');
-const { TORN_FATAL_ERROR_CODES } = require('../constants.js');
+const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH } = require('../constants.js');
 const { randomIntInclusive } = require('../utils/helpers.js');
 
 /**
@@ -68,7 +69,7 @@ function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) 
  * @param {{ value: number }} counter - API call counter
  * @returns {object} Result shape; factionName/companyName filled by caller
  */
-function buildResult(id, profileData, scores, period, ps, counter) {
+function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal) {
     const name = extractName(profileData);
     const level = extractLevel(profileData);
     const hasFaction = hasFactionFromProfile(profileData);
@@ -89,6 +90,9 @@ function buildResult(id, profileData, scores, period, ps, counter) {
         playerId: Number(id),
         name,
         level,
+        ageDays: ageDays != null ? Number(ageDays) : null,
+        ageMonths: ageDays != null ? Number((ageDays / AVG_DAYS_PER_MONTH).toFixed(2)) : null,
+        ageYears: ageDays != null ? Number((ageDays / 365.25).toFixed(2)) : null,
         hasFaction,
         hasCompany,
         factionName: null, // filled below after async fetches
@@ -98,6 +102,7 @@ function buildResult(id, profileData, scores, period, ps, counter) {
         tier,
         avgXanaxPerDay: scores.avgXanaxPerDay != null ? Number(scores.avgXanaxPerDay.toFixed(4)) : null,
         avgXanaxPerMonth: scores.avgXanaxPerMonth != null ? Number(scores.avgXanaxPerMonth.toFixed(2)) : null,
+        allTimeXanaxTaken: xanTakenTotal != null ? Number(xanTakenTotal) : null,
         statsAvailable: Boolean(scores.statsAvailable) && Boolean(ps),
         periodUsed: period,
         tornApiCallsUsed: counter.value,
@@ -115,6 +120,7 @@ function buildResult(id, profileData, scores, period, ps, counter) {
  */
 async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
     if (!apiKey) throw new Error('Torn API key is required.');
+    const xanaxMode = String(process.env.TORN_XANAX_MODE || 'fast').toLowerCase() === 'probe' ? 'probe' : 'fast';
 
     const {
         activeWithinHours,
@@ -128,6 +134,10 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         minLevel,
     } = parseOptions(opts);
 
+    const recencyBoostMax = Number.isFinite(Number(process.env.TORN_RECENCY_BOOST_MAX))
+        ? Number(process.env.TORN_RECENCY_BOOST_MAX)
+        : 4;
+
     const counter = { value: 0 };
     const runStats = { profilesOk: 0, activeCount: 0, passedFiltersCount: 0, lastTornError: null };
 
@@ -140,7 +150,24 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
     for (let i = 0; i < maxTries; i++) {
         const id = randomIntInclusive(minId, maxId);
 
-        const data = await fetchUser(id, USER_SELECTIONS, apiKey, counter);
+        const personalStatsFrom = period === 'month'
+            ? nowSeconds - Math.floor(AVG_DAYS_PER_MONTH * 86400)
+            : nowSeconds - 86400;
+        const personalStatsTo = nowSeconds;
+        // Request windowed personalstats. (Torn web UI looks similar, but API supports unix `from/to`.)
+        const personalStatsParams = {
+            stats: 'useractivity',
+            stat: 'xantaken',
+            from: personalStatsFrom,
+            to: personalStatsTo,
+        };
+        const data = await fetchUser(
+            id,
+            USER_SELECTIONS,
+            apiKey,
+            counter,
+            personalStatsParams,
+        );
 
         if (data?.error) {
             runStats.lastTornError = messageForTornError(data.error);
@@ -168,13 +195,32 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         const ps = data?.personalstats != null
             ? (data.personalstats.personalstats ?? data.personalstats)
             : null;
-        const xanTaken = ps ? extractXanaxTaken(ps) : null;
+        const xanTakenTotal = ps ? extractXanaxTaken(ps) : null;
+        const xanTakenForPeriod = ps ? extractXanaxTakenForPeriod(ps, period) : null;
         const ageDays = extractAgeDays(profileData);
 
+        // If Torn doesn't expose true windowed xanax totals for month scoring,
+        // we can't match "last month" exactly. In fast mode we apply a
+        // recency-based multiplier to lifetime avg/day so recruitment results
+        // are more responsive without extra API calls.
+        let avgXanaxPerDayMultiplier = 1;
+        if (xanaxMode === 'fast'
+            && period === 'month'
+            && xanTakenForPeriod == null
+            && Number.isFinite(activeWithinHours)
+            && activeWithinHours > 0) {
+            const hoursSinceLastAction = (nowSeconds - lastActionTs) / 3600;
+            const recencyT = 1 - (hoursSinceLastAction / activeWithinHours);
+            const t = Math.max(0, Math.min(1, recencyT));
+            avgXanaxPerDayMultiplier = 1 + recencyBoostMax * t;
+        }
+
         const scores = computeScores({
-            xanaxTakenTotal: xanTaken,
+            xanaxTakenTotal: xanTakenTotal,
+            xanaxTakenForPeriod: xanTakenForPeriod,
             ageDays,
             period,
+            avgXanaxPerDayMultiplier,
         });
 
         const xanScorePct = scores.xanScore * 100;
@@ -185,7 +231,9 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
             continue;
         }
 
-        const result = buildResult(id, profileData, scores, period, ps, counter);
+        const result = buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal);
+        result.periodIsWindowed = xanTakenForPeriod != null;
+        result.xanaxMode = xanaxMode;
 
         // Fetch names only for the chosen player
         result.factionName = result._factionId

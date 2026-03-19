@@ -57,20 +57,16 @@ function extractAgeDays(profileData) {
 
 /** Whether the user has a faction (ID or nested object). */
 function hasFactionFromProfile(profileData) {
-    const p = profileData?.profile ?? profileData;
-    const fid = p?.faction_id ?? p?.faction?.faction_id ?? p?.faction?.ID ?? null;
-    if (fid != null && Number(fid) > 0) return true;
-    const f = p?.faction;
-    return Boolean(f && typeof f === 'object' && Object.keys(f).length > 0);
+    // Keep this consistent with `extractFactionId()` so `hasFaction` matches
+    // whether Torn actually provides a valid faction ID.
+    return extractFactionId(profileData) != null;
 }
 
 /** Whether the user has a company/job. */
 function hasCompanyFromProfile(profileData) {
-    const p = profileData?.profile ?? profileData;
-    const cid = p?.company_id ?? p?.job?.company_id ?? p?.job?.company ?? null;
-    if (cid != null && Number(cid) > 0) return true;
-    const j = p?.job;
-    return Boolean(j && typeof j === 'object' && Object.keys(j).length > 0);
+    // Keep this consistent with `extractCompanyId()` so `hasCompany` matches
+    // whether Torn actually provides a valid company ID.
+    return extractCompanyId(profileData) != null;
 }
 
 /** @returns {number|null} Faction ID or null */
@@ -105,6 +101,101 @@ function extractXanaxTaken(personalstatsData) {
     return v != null ? Number(v) : null;
 }
 
+/**
+ * Try to extract xanax intake within the requested window from Torn `personalstats`.
+ *
+ * Notes:
+ * - Torn does not clearly document (in this repo) a guaranteed "last 30 days" xanax field.
+ * - This function uses best-effort key matching for month/day window fields when present.
+ * - If nothing window-based is found, returns null so scoring can fall back to lifetime averages.
+ *
+ * @param {object} personalstatsData
+ * @param {'day'|'month'} period
+ * @returns {number|null} window xanax taken total (if available publicly), else null
+ */
+function extractXanaxTakenForPeriod(personalstatsData, period) {
+    if (!personalstatsData || typeof personalstatsData !== 'object') return null;
+
+    const keys = Object.keys(personalstatsData);
+    if (!keys.length) return null;
+
+    const lowerPeriod = String(period || '').toLowerCase();
+    const isMonth = lowerPeriod === 'month';
+    const isDay = lowerPeriod === 'day';
+
+    const isXanKey = (k) => /xantaken|xanax[_-]?taken|xanax/i.test(String(k).toLowerCase());
+    const asNum = (v) => {
+        if (v == null) return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    };
+
+    // If Torn already applied the `from=1 month` / `from=1 day` window,
+    // some API responses may include window totals under a key that
+    // contains "30"/"month"/"last month"/etc. This extractor tries to
+    // identify those keys.
+    const lifetimeTotal = extractXanaxTaken(personalstatsData);
+
+    // Prefer explicit window fields when available.
+    if (isMonth) {
+        const monthCandidates = keys
+            .filter((k) => isXanKey(k))
+            .filter((k) => {
+                const lk = String(k).toLowerCase();
+                // month-like indicators (30-day / last month / 1m)
+                return /(30|last_?30|last30|month|last_?month|lastmonth|1m|1\s*m|1month|last30d|30d)/.test(lk);
+            });
+
+        if (monthCandidates.length) {
+            const scored = monthCandidates
+                .map((k) => ({ k, n: asNum(personalstatsData[k]) }))
+                .filter((x) => x.n != null);
+
+            const filtered = lifetimeTotal != null
+                ? scored.filter((x) => x.n <= lifetimeTotal)
+                : scored;
+
+            if (filtered.length) {
+                filtered.sort((a, b) => b.n - a.n);
+                return filtered[0].n;
+            }
+        }
+
+        // API returned only lifetime key (e.g. xantaken). Do not treat it as window data.
+        return null;
+    }
+
+    if (isDay) {
+        const dayCandidates = keys
+            .filter((k) => isXanKey(k))
+            .filter((k) => {
+                const lk = String(k).toLowerCase();
+                // 1-day / 24h / daily-like indicators
+                return /(1d|24h|day|daily|today|last_?day|lastday|24\s*h|24hr)/.test(lk);
+            });
+
+        if (dayCandidates.length) {
+            const scored = dayCandidates
+                .map((k) => ({ k, n: asNum(personalstatsData[k]) }))
+                .filter((x) => x.n != null);
+
+            const filtered = lifetimeTotal != null
+                ? scored.filter((x) => x.n <= lifetimeTotal)
+                : scored;
+
+            if (filtered.length) {
+                filtered.sort((a, b) => b.n - a.n);
+                return filtered[0].n;
+            }
+        }
+
+        // API returned only lifetime key; do not treat it as window data.
+        return null;
+    }
+
+    return null;
+}
+
 // @ts-ignore: project uses CommonJS (`require`/`module.exports`) for runtime compatibility.
 module.exports = {
     extractLastActionTimestampSeconds,
@@ -117,4 +208,5 @@ module.exports = {
     extractCompanyId,
     extractCompanyNameFromProfile,
     extractXanaxTaken,
+    extractXanaxTakenForPeriod,
 };

@@ -25,14 +25,17 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — find recruit
 **Files:** `src/services/random-active-ranked-player.js`, `run-active-ranked.js`
 
 Returns a random player who has been active in the last X hours. Response includes:
-- **playerId**, **name**, **level**
-- **xanScore** (0–100; based on lifetime avg xanax usage; 100% at ~3 xanax/day)
+- **playerId**, **name**, **level**, **ageDays**, **ageMonths**, **ageYears**
+- **xanScore** (0–100; based on avg xanax usage for the selected period window; 100% at ~3 xanax/day)
 - **tier** (S/A/B/C/D)
 - **hasFaction** (true/false) — whether the player is in a faction
 - **hasCompany** (true/false) — whether the player has a job/company
 - **factionName** (string or null) — name of the player's faction, if any
 - **companyName** (string or null) — name of the player's company/job, if any
 - **hoursSinceLastAction**, xanax averages, **statsAvailable**, **periodUsed**
+- **allTimeXanaxTaken** — lifetime xanax usage from Torn `personalstats`
+- **periodIsWindowed** (boolean) — `true` if Torn returned windowed xanax data for the period; `false` if only lifetime stats were available (then averages are derived from lifetime total ÷ account age). When `period=month` and this is `false`, the recruitment score applies a recency-based multiplier using `hoursSinceLastAction` to be more responsive to recent intake.
+- **xanaxMode** (`"fast"` or `"probe"`) — scoring mode used for xanax fallback behavior.
 - **tornApiCallsUsed** (number) — how many Torn API requests were made for this run (useful for staying under the 100/min limit)
 
 Run (PowerShell):
@@ -53,7 +56,8 @@ ACTIVE_HOURS  MIN_ID  MAX_ID  MAX_TRIES  PERIOD(day|month)  TIER  HAS_FACTION  H
 - **MAX_ID**: highest user ID to try (e.g. `3000000`).
 - **MAX_TRIES**: maximum random attempts before giving up (e.g. `120`).  
   Higher value = more time trying to find a matching player.
-- **PERIOD**: `"day"` or `"month"` — controls how xanax usage is normalised.
+- **PERIOD**: `"day"` or `"month"` — requested xanax window; if Torn returns only lifetime stats, we use lifetime total ÷ account age and set **periodIsWindowed: false**.
+- **Xanax mode (env)**: set `TORN_XANAX_MODE=fast` (default) or `TORN_XANAX_MODE=probe`.
 - **TIER**: `"S"|"A"|"B"|"C"|"D"|"ALL"` (not case-sensitive). Returns a player at **this tier or higher** (e.g. `C` = C, B, A, or S; `S` = S only). `"ALL"` = ignore tier.
 - **HAS_FACTION**: `Y` = only in a faction, `N` = only factionless, `ANY` or omit = don't care (case-insensitive).
 - **HAS_COMPANY**: `Y` = only with a job/company, `N` = only without, `ANY` or omit = don't care (case-insensitive).
@@ -114,10 +118,10 @@ The API is well-suited to finding **recruitment candidates**: active players who
 | Active in last 12–24h | `ACTIVE_HOURS=24` (or `12`) |
 | More candidates to choose from | Increase `MAX_TRIES` (e.g. `200`) |
 
-**Example — factionless, tier B or higher, level 25+, active in 24h:**
+**Example — factionless, tier C or higher, level 15+, active in 24h:**
 
 ```powershell
-$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 200 month B N ANY 25
+$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 200 month C N ANY 15
 ```
 
 **Tips:**
@@ -128,14 +132,18 @@ $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 200 month B
 
 ### API call count
 
-Every successful response includes **tornApiCallsUsed**: the number of requests made to Torn’s API for that run. To minimize calls, each try uses one combined user request (profile + personalstats). Typical run: each extra “try” (random ID checked) adds 1 call per try; only the chosen player gets 0–2 extra calls for faction/company names. Torn allows 100 calls per minute per user, so you can gauge how often you can run the script.
+Every successful response includes **tornApiCallsUsed**: the number of requests made to Torn's API for that run. To minimize calls, each try uses one combined user request (profile + personalstats). Typical run: each extra “try” (random ID checked) adds 1 call per try; only the chosen player gets 0–2 extra calls for faction/company names. Torn allows 100 calls per minute per user, so you can gauge how often you can run the script.
+
+Xanax mode impact:
+- `fast` (default): low-call mode for recruitment; when month-window xanax is unavailable, applies recency-weighted fallback.
+- `probe`: disables that recency fallback for random mode and keeps raw API-derived xanax inputs.
 
 ### Errors
 
 The script returns clear errors instead of a single generic message:
 
 - **No API key** — `Torn API key is required.`
-- **Invalid key / rate limit / IP block / key paused** — If Torn returns a fatal error (empty key, wrong key, too many requests, IP block, API disabled, key in jail, key paused), the script throws immediately with Torn’s error message so you don’t burn through all tries.
+- **Invalid key / rate limit / IP block / key paused** — If Torn returns a fatal error (empty key, wrong key, too many requests, IP block, API disabled, key in jail, key paused), the script throws immediately with Torn's error message so you don't burn through all tries.
 - **Every request failed** — e.g. `Every Torn API request failed (120 attempts). Check your API key...`
 - **No one active** — e.g. `No players were active in the last 24 hours after 50 profile checks (50 API calls). Try increasing activeWithinHours or maxTries.`
 - **No match for tier** — e.g. `No active player matched your tier filter (S) after 30 candidates (65 API calls). Try a different tier or increase maxTries.`
@@ -159,9 +167,13 @@ Run (PowerShell):
 $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked-by-id.js PLAYER_ID
 ```
 
-Scoring period:
-- By default the xanax scoring uses `month` normalization.
-- Set `TORN_SCORE_PERIOD=day` to switch to per-day normalization.
+Scoring period and **periodIsWindowed**:
+- The response includes the player's Torn profile age as **ageDays**, **ageMonths**, and **ageYears**.
+- The response includes **allTimeXanaxTaken** (lifetime `xantaken`).
+- Period is `month` by default (set `TORN_SCORE_PERIOD=day` for day). We request windowed personalstats from Torn; if the API returns only lifetime `xantaken`, we use lifetime total ÷ account age for averages and set **periodIsWindowed: false** in the response.
+- When **periodIsWindowed** is `false`, **avgXanaxPerMonth** / **avgXanaxPerDay** are derived from all-time xanax ÷ account age, not from a true “last month” window (the Torn user API does not expose windowed personalstats in the response we receive).
+- Set `TORN_XANAX_MODE=fast` (default) for low API call count, or `TORN_XANAX_MODE=probe` for deeper xanax probing (more API calls) on by-id lookups.
+- By-id call count guidance: `fast` is typically ~2-3 API calls (user + optional faction/company name lookups), while `probe` may be significantly higher.
 
 Example:
 
@@ -171,3 +183,4 @@ $env:TORN_API_KEY="your_key"; node run-active-ranked-by-id.js 1865163
 
  
 Note: this endpoint does not apply activity/tier/faction/company filters; it just calculates and returns the scoring response for the given ID.
+
