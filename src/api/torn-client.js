@@ -15,10 +15,18 @@ const { API_BASE } = require('../constants.js');
  * @param {{ value: number }} [counter] - If provided, counter.value is incremented per request
  * @returns {Promise<object>} Parsed JSON response
  */
-async function fetchUser(id, selections, apiKey, counter) {
+async function fetchUser(id, selections, apiKey, counter, queryParams = undefined) {
     if (counter) counter.value++;
-    const url = `${API_BASE}/user/${id}?selections=${encodeURIComponent(selections)}&key=${apiKey}`;
-    const res = await fetch(url);
+    const url = new URL(`${API_BASE}/user/${id}`);
+    url.searchParams.set('selections', selections);
+    url.searchParams.set('key', apiKey);
+    if (queryParams && typeof queryParams === 'object') {
+        for (const [k, v] of Object.entries(queryParams)) {
+            if (v == null) continue;
+            url.searchParams.set(k, String(v));
+        }
+    }
+    const res = await fetch(url.toString());
     return res.json();
 }
 

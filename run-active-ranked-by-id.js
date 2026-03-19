@@ -5,6 +5,10 @@
  * Period selection:
  *   Set `TORN_SCORE_PERIOD=day` to score using per-day normalization.
  *   Default is `month`.
+ *
+ * Xanax mode:
+ *   `TORN_XANAX_MODE=fast` (default): minimal API calls.
+ *   `TORN_XANAX_MODE=probe`: deeper xanax probing (more API calls).
  */
 
 const { getActiveRankedPlayerById } = require('./src/services/active-ranked-player-by-id.js');

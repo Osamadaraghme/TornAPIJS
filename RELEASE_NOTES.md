@@ -1,5 +1,18 @@
 # Release notes
 
+## v1.0.2 (latest patch updates)
+
+### Post-release updates
+
+- Added **ageDays**, **ageMonths**, and **ageYears** to both APIs (`random-active-ranked-player` and `active-ranked-player-by-id`).
+- Added **allTimeXanaxTaken** to both APIs (lifetime `xantaken` from Torn `personalstats`).
+- Added **xanaxMode** response field and unified env switch `TORN_XANAX_MODE=fast|probe`.
+- Set **fast mode as default** for lower API usage and recruitment readiness.
+- Optimized by-id call behavior in fast mode (minimal calls); kept probe mode for deeper xanax diagnostics when needed.
+- Updated CLI headers and README docs to reflect the new fields, mode switch, and API-call expectations.
+
+---
+
 ## v1.0.2
 
 **Release date:** 2026
