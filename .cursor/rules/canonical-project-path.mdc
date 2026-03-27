@@ -1,0 +1,15 @@
+﻿---
+description: Canonical repo path — all edits go to IdeaProjects TornAPIJS
+alwaysApply: true
+---
+
+# Canonical project directory
+
+- **All edits, new files, and project-scoped terminal work** must target:
+
+  `C:\Users\user\IdeaProjects\TornAPIJS`
+
+- Do **not** use Cursor git worktrees under `C:\Users\user\.cursor\worktrees\...` as the source of truth unless the user explicitly asks to change that copy.
+
+- If the workspace is opened on a worktree, **apply changes in IdeaProjects** (same relative paths under that root) or tell the user to open `IdeaProjects\TornAPIJS` as the folder in Cursor.
+

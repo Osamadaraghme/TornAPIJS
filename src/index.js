@@ -1,18 +1,16 @@
-/**
+﻿/**
  * TornAPIJS - public API.
  * Re-exports services so consumers can require('./src') or require('./src/index.js').
  */
 
 const {
-    exportRandomActivePlayerToCsv,
-    exportPlayerByIdToCsv,
-    exportFactionByHofRankToCsv,
-} = require('./controllers/player-stats-csv-controller.js');
+    exportRandomActivePlayerToSql,
+    exportPlayerByIdToSql,
+    exportFactionByHofRankToSql,
+} = require('./controllers/player-stats-export-controller.js');
 
 module.exports = {
-    // CSV-only public API
-    getRandomActiveRankedPlayerToCsv: exportRandomActivePlayerToCsv,
-    getActiveRankedPlayerByIdToCsv: exportPlayerByIdToCsv,
-    getFactionPlayersByHofRankToCsv: exportFactionByHofRankToCsv,
+    getRandomActiveRankedPlayerToSql: exportRandomActivePlayerToSql,
+    getActiveRankedPlayerByIdToSql: exportPlayerByIdToSql,
+    getFactionPlayersByHofRankToSql: exportFactionByHofRankToSql,
 };
-

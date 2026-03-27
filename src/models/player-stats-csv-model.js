@@ -1,6 +1,5 @@
 /**
- * CSV model for player stats exports.
- * Defines stable header order and row mapping from service result objects.
+ * Export model for player stats (SQL INSERT columns; same order as legacy CSV headers).
  */
 
 const CSV_HEADERS = [
@@ -33,7 +32,7 @@ const CSV_HEADERS = [
 ];
 
 /**
- * Build one CSV row from player stats.
+ * Build one export row object from player stats (keys match `CSV_HEADERS`).
  * @param {object} stats
  * @param {{ requestedFactionHofRank?: number|null, sourceFactionId?: number|null, sourceFactionName?: string|null }} [context]
  * @returns {object}

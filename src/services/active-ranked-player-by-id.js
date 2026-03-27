@@ -1,5 +1,5 @@
 /**
- * Service: active-ranked player by ID (CSV APIs use this under the hood).
+ * Service: active-ranked player by ID — stats fetch plus SQL append API.
  * Xanax month values are sourced from Torn v2 cumulative `xantaken` snapshots:
  * - all-time:      /v2/user/:id/personalstats?stat=xantaken
  * - until last mo: /v2/user/:id/personalstats?stat=xantaken&timestamp=...
@@ -25,7 +25,13 @@ const {
 } = require('../utils/extractors.js');
 const { computeScores, tierForFinalScore } = require('../utils/scoring.js');
 const { messageForTornError } = require('../utils/errors.js');
-const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH } = require('../constants.js');
+const {
+    TORN_FATAL_ERROR_CODES,
+    AVG_DAYS_PER_MONTH,
+    DEFAULT_BY_ID_STATS_SQL_PATH,
+} = require('../constants.js');
+const { appendSqlRow } = require('../utils/sql-append.js');
+const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 
 function toFiniteNumber(value) {
     const n = Number(value);
@@ -163,7 +169,39 @@ async function getActiveRankedPlayerById(playerId) {
     return result;
 }
 
+/**
+ * Fetch player stats and append them as one INSERT row in a .sql file.
+ * @param {number|string} playerId - Torn user ID
+ * @param {object} [options]
+ * @param {string} [options.sqlPath] - Output .sql path
+ * @param {string} [options.csvPath] - Deprecated alias for sqlPath
+ * @returns {Promise<{ path: string, created: boolean, data: object }>}
+ */
+async function getActiveRankedPlayerByIdToSql(playerId, options = {}) {
+    const sqlPath = options.sqlPath
+        ?? options.csvPath
+        ?? process.env.TORN_BY_ID_STATS_SQL
+        ?? process.env.TORN_BY_ID_STATS_CSV
+        ?? process.env.TORN_STATS_SQL
+        ?? process.env.TORN_STATS_CSV
+        ?? DEFAULT_BY_ID_STATS_SQL_PATH;
+
+    const stats = await getActiveRankedPlayerById(playerId);
+
+    const row = buildPlayerStatsCsvRow(stats);
+
+    const { path: resolvedPath, created } = appendSqlRow(sqlPath, CSV_HEADERS, row);
+
+    return {
+        path: resolvedPath,
+        created,
+        data: stats,
+    };
+}
+
 module.exports = {
     getActiveRankedPlayerById,
+    getActiveRankedPlayerByIdToSql,
+    CSV_HEADERS,
 };
 

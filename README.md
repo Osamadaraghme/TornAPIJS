@@ -1,18 +1,18 @@
 # TornAPIJS
 
-CSV-first Torn recruitment APIs in JavaScript.
+SQL-export Torn recruitment APIs in JavaScript.
 
-All public APIs now write to CSV (create if missing, append if it exists).
+All public APIs append `INSERT` rows to `.sql` files (create if missing, append if they exist). New files include comment lines that list every column name in the same order as the model (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
 ## Architecture (MVC + services)
 
 - `src/controllers/` - API controllers used by CLI and programmatic entry points
-- `src/models/` - CSV record model and column definitions
+- `src/models/` - Column definitions and row mapping for exports
 - `src/views/` - CLI output formatting
 - `src/services/` - business logic and Torn API orchestration
 - `src/api/` - low-level Torn HTTP client with key failover
-- `src/utils/` - extractors, scoring, errors, helpers, CSV append utility
-- `src/index.js` - public CSV-only exports
+- `src/utils/` - extractors, scoring, errors, helpers, SQL append utility
+- `src/index.js` - public SQL export exports (`src/controllers/player-stats-export-controller.js`)
 
 ## API key behavior
 
@@ -25,11 +25,15 @@ All public APIs now write to CSV (create if missing, append if it exists).
 
 | API | What it does | CLI call |
 |---|---|---|
-| Random active ranked -> CSV | Finds one random active player by filters and appends one row | `node run-active-ranked.js 24 1 3000000 120 month C ANY ANY 15` |
-| Player by ID -> CSV | Fetches one player, computes monthly xanax delta fields, and appends one row | `node run-active-ranked-by-id-csv.js 3532802` |
-| Faction HoF rank -> CSV | Finds faction at HoF rank and appends one row per member | `node run-faction-hof-rank-csv.js 1 .\exports\player-stats.csv 20` |
+| Random active ranked -> SQL | Finds one random active player by filters and appends one `INSERT` | `node run-active-ranked.js 24 1 3000000 120 month C ANY ANY 15` |
+| Player by ID -> SQL | Fetches one player, computes monthly xanax delta fields, and appends one `INSERT` | `node run-active-ranked-by-id-csv.js 3532802` |
+| Faction HoF rank -> SQL | Finds faction at HoF rank and appends one `INSERT` per member (up to cap) | `node run-faction-hof-rank-csv.js 1 20` |
 
-All three return JSON output that includes CSV metadata (`path`, `created`) and player/faction data while writing to CSV.
+Default `.sql` paths are under `./exports/` (see below). Optional `[SQL_PATH]` overrides are documented in each section. Some runner filenames still include `csv` for historical reasons only.
+
+All three return JSON output that includes export metadata (`path`, `created`) and player/faction data while writing to `.sql`.
+
+Programmatic entry points: `getRandomActiveRankedPlayerToSql`, `getActiveRankedPlayerByIdToSql`, `getFactionPlayersByHofRankToSql` (see `src/index.js`).
 
 ## Random active ranked API
 
@@ -39,11 +43,13 @@ Run:
 node run-active-ranked.js
 ```
 
-Arguments:
+Arguments (positional â€” earlier slots must be filled to reach later ones):
 
 ```text
-ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD(day|month) TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL] [CSV_PATH]
+ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL] [SQL_PATH]
 ```
+
+The 6th token (`PERIOD`) is only there to keep argument positions aligned with older CLIs; **the random ranked service always uses the monthly xanax window** (`v2-monthly-delta`) and does not read `day` vs `month`. Pass `month` in examples.
 
 Tier behavior (`TIER` is case-insensitive):
 - `S` -> S only
@@ -62,58 +68,60 @@ Tier score ranges (`xanScore`):
 - `D`: `>= 50` and `< 60`
 - `F`: `< 50`
 
-Examples:
+Examples (default `./exports/random-active-ranked-player-stats.sql`):
 
 ```powershell
 node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
-node run-active-ranked.js 24 1 3000000 120 month C N ANY 15 .\exports\player-stats.csv
+node run-active-ranked.js 24 1 3000000 120 month C N ANY 15
 ```
+
+Optional: append `[SQL_PATH]` as the 12th argument to write elsewhere.
 
 ## Player by ID API
 
 Run:
 
 ```powershell
-node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]
+node run-active-ranked-by-id-csv.js PLAYER_ID [SQL_PATH]
 ```
 
-Examples:
+Examples (default `./exports/active-ranked-player-by-id-stats.sql`):
 
 ```powershell
 node run-active-ranked-by-id-csv.js 3532802
-node run-active-ranked-by-id-csv.js 3532802 .\exports\player-stats.csv
 ```
+
+Optional: `node run-active-ranked-by-id-csv.js PLAYER_ID [SQL_PATH]`
 
 ## Faction HoF rank API
 
 Run:
 
 ```powershell
-node run-faction-hof-rank-csv.js HOF_RANK [CSV_PATH] [MAX_PLAYERS]
-# short form using default CSV:
+node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]
+# short form using default .sql path:
 node run-faction-hof-rank-csv.js HOF_RANK MAX_PLAYERS
 ```
 
-Examples:
+Examples (default `./exports/faction-hof-rank-player-stats.sql`):
 
 ```powershell
 node run-faction-hof-rank-csv.js 1
-node run-faction-hof-rank-csv.js 1 .\exports\player-stats.csv
-node run-faction-hof-rank-csv.js 1 .\exports\player-stats.csv 20
+node run-faction-hof-rank-csv.js 1 20
 ```
 
-## CSV defaults
+Optional: `node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]` when you need a custom file.
 
-- Each API has its own static default CSV file:
-  - random API: `./exports/random-active-ranked-player-stats.csv`
-  - by-id API: `./exports/active-ranked-player-by-id-stats.csv`
-  - faction HoF API: `./exports/faction-hof-rank-player-stats.csv`
-- You can override CSV per call with CLI `[CSV_PATH]` argument.
-- Optional env overrides per API:
-  - `TORN_RANDOM_STATS_CSV`
-  - `TORN_BY_ID_STATS_CSV`
-  - `TORN_FACTION_HOF_STATS_CSV`
-- Optional global fallback override: `TORN_STATS_CSV`
+## SQL file format and defaults
+
+- Each API has its own default `.sql` file under `./exports/`:
+  - random API: `./exports/random-active-ranked-player-stats.sql`
+  - by-id API: `./exports/active-ranked-player-by-id-stats.sql`
+  - faction HoF API: `./exports/faction-hof-rank-player-stats.sql`
+- New files start with a sentinel line and comments listing all column headers, then `INSERT INTO "player_stats" (...)` rows. Table name is `player_stats` (see `src/utils/sql-append.js`).
+- Override path per call with CLI `[SQL_PATH]`, or `options.sqlPath` / `options.csvPath` (legacy alias) in code.
+- Env overrides per API: `TORN_RANDOM_STATS_SQL`, `TORN_BY_ID_STATS_SQL`, `TORN_FACTION_HOF_STATS_SQL`. Legacy `*_CSV` and `TORN_STATS_CSV` env names are still read as fallbacks.
+- Global fallback: `TORN_STATS_SQL` or `TORN_STATS_CSV`.
 - Optional member cap for HoF export: `TORN_FACTION_MEMBER_LIMIT`
 
 ## Notes on xanax window accuracy

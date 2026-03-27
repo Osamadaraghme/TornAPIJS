@@ -1,0 +1,13 @@
+---
+description: README and RELEASE_NOTES must match code before any Git push
+alwaysApply: true
+---
+
+# Documentation before Git
+
+Before you **commit** or **push** with Git:
+
+1. Update `README.md` for user-facing behavior (CLI, env vars, defaults, public API).
+2. Update `RELEASE_NOTES.md` with what changed and any breaking migrations.
+
+Do not ship doc drift in the same changeset as code changes.

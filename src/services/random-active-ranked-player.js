@@ -1,5 +1,5 @@
 /**
- * Service: random ACTIVE player with month-delta xanax scoring.
+ * Service: random ACTIVE player with month-delta xanax scoring; SQL append entry point only.
  * Month values are computed from Torn v2 cumulative snapshots:
  * duringLastMonth = allTime - untilLastMonth.
  */
@@ -24,7 +24,13 @@ const {
 } = require('../utils/extractors.js');
 const { computeScores, tierForFinalScore, isTierAtOrAbove, VALID_TIERS } = require('../utils/scoring.js');
 const { messageForTornError, buildNoPlayerFoundError } = require('../utils/errors.js');
-const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH } = require('../constants.js');
+const {
+    TORN_FATAL_ERROR_CODES,
+    AVG_DAYS_PER_MONTH,
+    DEFAULT_RANDOM_STATS_SQL_PATH,
+} = require('../constants.js');
+const { appendSqlRow } = require('../utils/sql-append.js');
+const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 const { randomIntInclusive } = require('../utils/helpers.js');
 
 function toFiniteNumber(value) {
@@ -220,7 +226,32 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
     throw buildNoPlayerFoundError(runStats, { maxTries, activeWithinHours, desiredTier }, counter);
 }
 
+/**
+ * Fetch one random active ranked player and append one INSERT row to a .sql file.
+ * @param {string|string[]|undefined} apiKey - Optional key override/key pool
+ * @param {object} [options]
+ * @param {string} [options.sqlPath] - Output .sql path
+ * @param {string} [options.csvPath] - Deprecated alias for sqlPath
+ * @returns {Promise<{ path: string, created: boolean, data: object }>}
+ */
+async function getRandomActiveRankedPlayerToSql(apiKey, options = {}) {
+    const sqlPath = options.sqlPath
+        ?? options.csvPath
+        ?? process.env.TORN_RANDOM_STATS_SQL
+        ?? process.env.TORN_RANDOM_STATS_CSV
+        ?? process.env.TORN_STATS_SQL
+        ?? process.env.TORN_STATS_CSV
+        ?? DEFAULT_RANDOM_STATS_SQL_PATH;
+
+    const stats = await getRandomActiveRankedPlayer(apiKey, options);
+
+    const row = buildPlayerStatsCsvRow(stats);
+
+    const { path: resolvedPath, created } = appendSqlRow(sqlPath, CSV_HEADERS, row);
+    return { path: resolvedPath, created, data: stats };
+}
+
 module.exports = {
-    getRandomActiveRankedPlayer,
+    getRandomActiveRankedPlayerToSql,
 };
 
