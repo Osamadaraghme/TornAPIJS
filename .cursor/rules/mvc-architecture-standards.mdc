@@ -1,0 +1,40 @@
+---
+description: Clean code, MVC-style layout, naming and directory placement
+alwaysApply: true
+---
+
+# Code quality and MVC-style structure
+
+## Architecture (match existing `src/` layout)
+
+- **`src/controllers/`** - Thin orchestration for entry points (CLI runners, programmatic API): validate inputs, call services, return shapes callers expect. No Torn HTTP or heavy business rules here.
+- **`src/models/`** - Data shapes, export column definitions, row builders (e.g. SQL/CSV field mapping). No I/O or API calls.
+- **`src/views/`** - User-facing output only (e.g. CLI formatting, printing). No business logic or HTTP.
+- **`src/services/`** - Business logic and Torn workflow (fetch, score, compose results). Use `src/api/` for HTTP, `src/utils/` for shared pure helpers.
+- **`src/api/`** - Low-level HTTP client to Torn only.
+- **`src/utils/`** - Reusable, mostly pure helpers (extractors, scoring, errors, append utilities). Not feature-specific orchestration.
+
+Do not bypass this layering (for example, do not call `src/api/` directly from a runner; go through controllers, then services).
+
+## File naming
+
+- Use **kebab-case** for JavaScript files: `player-stats-csv-model.js`, `faction-hof-rank-player-stats-csv.js`.
+- Names should state **role + domain**: `*-controller.js`, `*-model.js`, `*-service.js` (or clear feature names like `torn-client.js`).
+- Avoid vague names (`helpers2.js`, `misc.js`). One main concern per file.
+
+## File placement
+
+- New **CLI-facing orchestration** goes in `src/controllers/`.
+- New **record/export schema** goes in `src/models/`.
+- New **console output** goes in `src/views/`.
+- New **Torn workflows or recruitment logic** goes in `src/services/`.
+- New **HTTP transport** goes in `src/api/`.
+- New **shared non-feature logic** goes in `src/utils/`.
+- Root **`run-*.js`** files stay thin: parse argv, require controller, print via view.
+
+## Clean code expectations
+
+- Prefer **small, focused** functions and modules; reuse existing abstractions instead of duplicating.
+- Match **surrounding style**: imports, naming, error handling, and comment density already used in the file.
+- **No unrelated refactors** in the same change as a feature fix unless requested.
+- Keep the public surface (`src/index.js`) intentional: export only what consumers need.

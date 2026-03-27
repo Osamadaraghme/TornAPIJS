@@ -1,14 +1,15 @@
 /**
- * Service: random ACTIVE player with xanax-based tier (S/A/B/C/D).
- * Finds a player active in the last N hours, applies optional faction/company/tier filters,
- * computes score and tier, fetches faction/company names, returns result + API call count.
- *
- * API call minimization: we request profile + personalstats in a single user request
- * (one call per try instead of two when we need both). Faction/company names are only
- * fetched for the final chosen player.
+ * Service: random ACTIVE player with month-delta xanax scoring; SQL append entry point only.
+ * Month values are computed from Torn v2 cumulative snapshots:
+ * duringLastMonth = allTime - untilLastMonth.
  */
 
-const { fetchUser, fetchFactionName, fetchCompanyName } = require('../api/torn-client.js');
+const {
+    fetchUser,
+    fetchFactionName,
+    fetchCompanyName,
+    fetchUserPersonalStatV2,
+} = require('../api/torn-client.js');
 const {
     extractLastActionTimestampSeconds,
     extractName,
@@ -19,26 +20,40 @@ const {
     extractFactionId,
     extractCompanyId,
     extractCompanyNameFromProfile,
-    extractXanaxTaken,
-    extractXanaxTakenForPeriod,
+    extractFactionNameFromProfile,
 } = require('../utils/extractors.js');
 const { computeScores, tierForFinalScore, isTierAtOrAbove, VALID_TIERS } = require('../utils/scoring.js');
 const { messageForTornError, buildNoPlayerFoundError } = require('../utils/errors.js');
-const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH } = require('../constants.js');
+const {
+    TORN_FATAL_ERROR_CODES,
+    AVG_DAYS_PER_MONTH,
+    DEFAULT_RANDOM_STATS_SQL_PATH,
+} = require('../constants.js');
+const { appendSqlRow } = require('../utils/sql-append.js');
+const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 const { randomIntInclusive } = require('../utils/helpers.js');
 
-/**
- * Normalise and validate options; return a single options object.
- * @param {object} opts - Raw options (activeWithinHours, minId, maxId, maxTries, period, tier, hasFaction, hasCompany, minLevel)
- * @returns {object} Normalised options with defaults applied
- */
+function toFiniteNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+function throwOnTornError(errorObj) {
+    if (!errorObj) return;
+    const message = messageForTornError(errorObj);
+    const code = errorObj?.code ?? errorObj?.error_code;
+    if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
+        throw new Error(message || `Torn API error (code ${code}).`);
+    }
+    throw new Error(message || 'Torn API error.');
+}
+
 function parseOptions(opts) {
     return {
         activeWithinHours: Number.isFinite(opts.activeWithinHours) ? opts.activeWithinHours : 24,
         minId: Number.isFinite(opts.minId) ? opts.minId : 1,
         maxId: Number.isFinite(opts.maxId) ? opts.maxId : 3000000,
         maxTries: Number.isFinite(opts.maxTries) ? opts.maxTries : 60,
-        period: opts.period === 'month' ? 'month' : 'day',
         desiredTier: (typeof opts.tier === 'string' ? opts.tier : 'ALL').toUpperCase(),
         factionFilter: (typeof opts.hasFaction === 'string' ? opts.hasFaction : 'ANY').toUpperCase(),
         companyFilter: (typeof opts.hasCompany === 'string' ? opts.hasCompany : 'ANY').toUpperCase(),
@@ -46,9 +61,6 @@ function parseOptions(opts) {
     };
 }
 
-/**
- * Check if this profile passes faction and company filters.
- */
 function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) {
     const hasFaction = hasFactionFromProfile(profileData);
     const hasCompany = hasCompanyFromProfile(profileData);
@@ -59,17 +71,37 @@ function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) 
     return true;
 }
 
-/**
- * Build the success response object for one matched player.
- * @param {number} id - Player ID
- * @param {object} profileData - Normalised profile from API
- * @param {object} scores - Output from computeScores
- * @param {string} period - 'day' or 'month'
- * @param {object|null} ps - Personal stats object (or null)
- * @param {{ value: number }} counter - API call counter
- * @returns {object} Result shape; factionName/companyName filled by caller
- */
-function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal) {
+async function fetchMonthlyXanaxStats(playerId, apiKey, counter) {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const monthAgoTimestamp = nowSeconds - Math.floor(AVG_DAYS_PER_MONTH * 86400);
+
+    const allTimeRes = await fetchUserPersonalStatV2(playerId, 'xantaken', apiKey, counter);
+    throwOnTornError(allTimeRes?.raw?.error);
+    const untilLastMonthRes = await fetchUserPersonalStatV2(
+        playerId,
+        'xantaken',
+        apiKey,
+        counter,
+        monthAgoTimestamp,
+    );
+    throwOnTornError(untilLastMonthRes?.raw?.error);
+
+    const allTimeXanaxTaken = toFiniteNumber(allTimeRes.value);
+    const xanaxTakenUntilLastMonth = toFiniteNumber(untilLastMonthRes.value);
+    let xanaxTakenDuringLastMonth = null;
+    if (allTimeXanaxTaken != null && xanaxTakenUntilLastMonth != null) {
+        xanaxTakenDuringLastMonth = Math.max(0, allTimeXanaxTaken - xanaxTakenUntilLastMonth);
+    }
+
+    return {
+        allTimeXanaxTaken,
+        xanaxTakenUntilLastMonth,
+        xanaxTakenDuringLastMonth,
+        periodIsWindowed: xanaxTakenDuringLastMonth != null,
+    };
+}
+
+function buildResult(id, profileData, scores, counter, ageDays, xanaxStats) {
     const name = extractName(profileData);
     const level = extractLevel(profileData);
     const hasFaction = hasFactionFromProfile(profileData);
@@ -83,6 +115,7 @@ function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanT
     const tier = tierForFinalScore(finalScorePct);
 
     const factionId = extractFactionId(profileData);
+    const factionNameFromProfile = extractFactionNameFromProfile(profileData);
     const companyId = extractCompanyId(profileData);
     const companyNameFromProfile = extractCompanyNameFromProfile(profileData);
 
@@ -95,79 +128,47 @@ function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanT
         ageYears: ageDays != null ? Number((ageDays / 365.25).toFixed(2)) : null,
         hasFaction,
         hasCompany,
-        factionName: null, // filled below after async fetches
+        factionName: factionNameFromProfile ?? null,
         companyName: companyNameFromProfile ?? null,
         hoursSinceLastAction: Number(hoursSinceLastAction.toFixed(2)),
         xanScore: Number(xanScorePct.toFixed(2)),
         tier,
         avgXanaxPerDay: scores.avgXanaxPerDay != null ? Number(scores.avgXanaxPerDay.toFixed(4)) : null,
-        avgXanaxPerMonth: scores.avgXanaxPerMonth != null ? Number(scores.avgXanaxPerMonth.toFixed(2)) : null,
-        allTimeXanaxTaken: xanTakenTotal != null ? Number(xanTakenTotal) : null,
-        statsAvailable: Boolean(scores.statsAvailable) && Boolean(ps),
-        periodUsed: period,
+        allTimeXanaxTaken: xanaxStats.allTimeXanaxTaken,
+        xanaxTakenUntilLastMonth: xanaxStats.xanaxTakenUntilLastMonth,
+        xanaxTakenDuringLastMonth: xanaxStats.xanaxTakenDuringLastMonth,
+        statsAvailable: Boolean(scores.statsAvailable),
+        periodUsed: 'month',
+        periodIsWindowed: xanaxStats.periodIsWindowed,
+        xanaxMode: 'v2-monthly-delta',
         tornApiCallsUsed: counter.value,
         _factionId: factionId,
+        _factionNameFromProfile: factionNameFromProfile,
         _companyId: companyId,
         _companyNameFromProfile: companyNameFromProfile,
     };
 }
 
-/**
- * Get a random active player in the last X hours, with optional tier/faction/company filters.
- * @param {string} apiKey - Torn API key
- * @param {object} [opts] - activeWithinHours, minId, maxId, maxTries, period, tier, hasFaction, hasCompany, minLevel
- * @returns {Promise<object>} Player result including tornApiCallsUsed
- */
 async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
-    if (!apiKey) throw new Error('Torn API key is required.');
-    const xanaxMode = String(process.env.TORN_XANAX_MODE || 'fast').toLowerCase() === 'probe' ? 'probe' : 'fast';
-
     const {
         activeWithinHours,
         minId,
         maxId,
         maxTries,
-        period,
         desiredTier,
         factionFilter,
         companyFilter,
         minLevel,
     } = parseOptions(opts);
 
-    const recencyBoostMax = Number.isFinite(Number(process.env.TORN_RECENCY_BOOST_MAX))
-        ? Number(process.env.TORN_RECENCY_BOOST_MAX)
-        : 4;
-
     const counter = { value: 0 };
     const runStats = { profilesOk: 0, activeCount: 0, passedFiltersCount: 0, lastTornError: null };
-
     const nowSeconds = Math.floor(Date.now() / 1000);
     const cutoff = nowSeconds - Math.floor(activeWithinHours * 3600);
 
-    // Single request per try: profile + personalstats (saves 1 API call per run vs. separate calls)
-    const USER_SELECTIONS = 'profile,personalstats';
-
     for (let i = 0; i < maxTries; i++) {
         const id = randomIntInclusive(minId, maxId);
-
-        const personalStatsFrom = period === 'month'
-            ? nowSeconds - Math.floor(AVG_DAYS_PER_MONTH * 86400)
-            : nowSeconds - 86400;
-        const personalStatsTo = nowSeconds;
-        // Request windowed personalstats. (Torn web UI looks similar, but API supports unix `from/to`.)
-        const personalStatsParams = {
-            stats: 'useractivity',
-            stat: 'xantaken',
-            from: personalStatsFrom,
-            to: personalStatsTo,
-        };
-        const data = await fetchUser(
-            id,
-            USER_SELECTIONS,
-            apiKey,
-            counter,
-            personalStatsParams,
-        );
+        const data = await fetchUser(id, 'profile', apiKey, counter);
 
         if (data?.error) {
             runStats.lastTornError = messageForTornError(data.error);
@@ -192,61 +193,32 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         }
         runStats.passedFiltersCount++;
 
-        const ps = data?.personalstats != null
-            ? (data.personalstats.personalstats ?? data.personalstats)
-            : null;
-        const xanTakenTotal = ps ? extractXanaxTaken(ps) : null;
-        const xanTakenForPeriod = ps ? extractXanaxTakenForPeriod(ps, period) : null;
         const ageDays = extractAgeDays(profileData);
-
-        // If Torn doesn't expose true windowed xanax totals for month scoring,
-        // we can't match "last month" exactly. In fast mode we apply a
-        // recency-based multiplier to lifetime avg/day so recruitment results
-        // are more responsive without extra API calls.
-        let avgXanaxPerDayMultiplier = 1;
-        if (xanaxMode === 'fast'
-            && period === 'month'
-            && xanTakenForPeriod == null
-            && Number.isFinite(activeWithinHours)
-            && activeWithinHours > 0) {
-            const hoursSinceLastAction = (nowSeconds - lastActionTs) / 3600;
-            const recencyT = 1 - (hoursSinceLastAction / activeWithinHours);
-            const t = Math.max(0, Math.min(1, recencyT));
-            avgXanaxPerDayMultiplier = 1 + recencyBoostMax * t;
-        }
-
+        const xanaxStats = await fetchMonthlyXanaxStats(id, apiKey, counter);
         const scores = computeScores({
-            xanaxTakenTotal: xanTakenTotal,
-            xanaxTakenForPeriod: xanTakenForPeriod,
+            xanaxTakenTotal: xanaxStats.allTimeXanaxTaken,
+            xanaxTakenForPeriod: xanaxStats.xanaxTakenDuringLastMonth,
             ageDays,
-            period,
-            avgXanaxPerDayMultiplier,
+            period: 'month',
         });
 
-        const xanScorePct = scores.xanScore * 100;
-        const finalScorePct = scores.finalScore * 100;
-        const tier = tierForFinalScore(finalScorePct);
-
+        const tier = tierForFinalScore(scores.finalScore * 100);
         if (VALID_TIERS.includes(desiredTier) && !isTierAtOrAbove(tier, desiredTier)) {
             continue;
         }
 
-        const result = buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal);
-        result.periodIsWindowed = xanTakenForPeriod != null;
-        result.xanaxMode = xanaxMode;
-
-        // Fetch names only for the chosen player
-        result.factionName = result._factionId
+        const result = buildResult(id, profileData, scores, counter, ageDays, xanaxStats);
+        result.factionName = result._factionNameFromProfile ?? (result._factionId
             ? await fetchFactionName(result._factionId, apiKey, counter)
-            : null;
+            : null);
         result.companyName = result._companyNameFromProfile ?? (result._companyId
             ? await fetchCompanyName(result._companyId, apiKey, counter)
             : null);
 
         delete result._factionId;
+        delete result._factionNameFromProfile;
         delete result._companyId;
         delete result._companyNameFromProfile;
-
         result.tornApiCallsUsed = counter.value;
         return result;
     }
@@ -254,7 +226,32 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
     throw buildNoPlayerFoundError(runStats, { maxTries, activeWithinHours, desiredTier }, counter);
 }
 
+/**
+ * Fetch one random active ranked player and append one INSERT row to a .sql file.
+ * @param {string|string[]|undefined} apiKey - Optional key override/key pool
+ * @param {object} [options]
+ * @param {string} [options.sqlPath] - Output .sql path
+ * @param {string} [options.csvPath] - Deprecated alias for sqlPath
+ * @returns {Promise<{ path: string, created: boolean, data: object }>}
+ */
+async function getRandomActiveRankedPlayerToSql(apiKey, options = {}) {
+    const sqlPath = options.sqlPath
+        ?? options.csvPath
+        ?? process.env.TORN_RANDOM_STATS_SQL
+        ?? process.env.TORN_RANDOM_STATS_CSV
+        ?? process.env.TORN_STATS_SQL
+        ?? process.env.TORN_STATS_CSV
+        ?? DEFAULT_RANDOM_STATS_SQL_PATH;
+
+    const stats = await getRandomActiveRankedPlayer(apiKey, options);
+
+    const row = buildPlayerStatsCsvRow(stats);
+
+    const { path: resolvedPath, created } = appendSqlRow(sqlPath, CSV_HEADERS, row);
+    return { path: resolvedPath, created, data: stats };
+}
+
 module.exports = {
-    getRandomActiveRankedPlayer,
+    getRandomActiveRankedPlayerToSql,
 };
 

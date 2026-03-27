@@ -1,25 +1,18 @@
-/**
+﻿/**
  * Run from project folder:
- *   PowerShell: $env:TORN_API_KEY="your_key"; node run-active-ranked.js
+ *   PowerShell: node run-active-ranked.js
  *
- * Optional args: ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL]
- *
- * Xanax mode:
- *   `TORN_XANAX_MODE=fast` (default): low-call recruitment mode (recency-weighted fallback when month window is unavailable).
- *   `TORN_XANAX_MODE=probe`: disables recency multiplier fallback and uses raw API-derived xanax inputs.
+ * Optional args: ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL] [SQL_PATH]
+ * (PERIOD is ignored for scoring; service always uses monthly xanax delta â€” pass `month` to match examples.)
  * Example:
- *   $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
- *   $env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month B N ANY 20
+ *   node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
+ *   node run-active-ranked.js 24 1 3000000 120 month B N ANY 20
  */
 
-const { getRandomActiveRankedPlayer } = require('./src/services/random-active-ranked-player.js');
+const { exportRandomActivePlayerToSql } = require('./src/controllers/player-stats-export-controller.js');
+const { printSuccess, printError } = require('./src/views/cli-output-view.js');
 
-const apiKey = process.env.TORN_API_KEY;
-if (!apiKey) {
-    console.log('Usage (PowerShell): $env:TORN_API_KEY="your_key"; node run-active-ranked.js');
-    console.log('Optional args: ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL]');
-    process.exit(1);
-}
+const apiKey = process.env.TORN_API_KEY; // optional override; static pool is used when unset
 
 const activeWithinHours = process.argv[2] ? Number(process.argv[2]) : undefined;
 const minId = process.argv[3] ? Number(process.argv[3]) : undefined;
@@ -30,13 +23,26 @@ const tier = process.argv[7] || 'ALL';
 const hasFaction = process.argv[8] || 'ANY';
 const hasCompany = process.argv[9] || 'ANY';
 const minLevel = process.argv[10] ? Number(process.argv[10]) : undefined;
+const sqlPath = process.argv[11];
 
-getRandomActiveRankedPlayer(apiKey, { activeWithinHours, minId, maxId, maxTries, period, tier, hasFaction, hasCompany, minLevel })
+exportRandomActivePlayerToSql(apiKey, {
+    activeWithinHours,
+    minId,
+    maxId,
+    maxTries,
+    period,
+    tier,
+    hasFaction,
+    hasCompany,
+    minLevel,
+    ...(sqlPath ? { sqlPath } : {}),
+})
     .then((out) => {
-        console.log(JSON.stringify(out, null, 2));
+        printSuccess(out);
     })
     .catch((err) => {
-        console.error(err?.message || err);
+        printError(err);
         // Brief delay before exit so Node can close in-flight fetch handles (avoids libuv assertion on Windows).
         setTimeout(() => process.exit(1), 100);
     });
+

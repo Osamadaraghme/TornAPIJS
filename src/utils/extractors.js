@@ -95,6 +95,18 @@ function extractCompanyNameFromProfile(profileData) {
     return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
+/**
+ * Faction name from user profile if present (avoids extra faction API call).
+ * @returns {string|null}
+ */
+function extractFactionNameFromProfile(profileData) {
+    const p = profileData?.profile ?? profileData;
+    const faction = p?.faction ?? null;
+    if (!faction || typeof faction !== 'object') return null;
+    const name = faction.faction_name ?? faction.name ?? null;
+    return typeof name === 'string' && name.length > 0 ? name : null;
+}
+
 /** Total xanax taken from personalstats (lifetime). Handles different field names. */
 function extractXanaxTaken(personalstatsData) {
     const v = personalstatsData?.xantaken ?? personalstatsData?.xanax_taken ?? personalstatsData?.xanaxTaken ?? null;
@@ -207,6 +219,7 @@ module.exports = {
     extractFactionId,
     extractCompanyId,
     extractCompanyNameFromProfile,
+    extractFactionNameFromProfile,
     extractXanaxTaken,
     extractXanaxTakenForPeriod,
 };

@@ -12,6 +12,11 @@ const AVG_DAYS_PER_MONTH = 30.4375;
 /** Lifetime avg xanax per day that gives 100% score (softer = lower value). */
 const XANAX_PER_DAY_FOR_FULL_SCORE = 3;
 
+/** Static default SQL export paths per API (can be overridden per call). */
+const DEFAULT_RANDOM_STATS_SQL_PATH = './exports/random-active-ranked-player-stats.sql';
+const DEFAULT_BY_ID_STATS_SQL_PATH = './exports/active-ranked-player-by-id-stats.sql';
+const DEFAULT_FACTION_HOF_STATS_SQL_PATH = './exports/faction-hof-rank-player-stats.sql';
+
 /**
  * Torn API error code → human-readable message.
  * @see https://www.torn.com/api.html
@@ -40,6 +45,9 @@ module.exports = {
     API_BASE,
     AVG_DAYS_PER_MONTH,
     XANAX_PER_DAY_FOR_FULL_SCORE,
+    DEFAULT_RANDOM_STATS_SQL_PATH,
+    DEFAULT_BY_ID_STATS_SQL_PATH,
+    DEFAULT_FACTION_HOF_STATS_SQL_PATH,
     TORN_ERROR_MESSAGES,
     TORN_FATAL_ERROR_CODES,
 };
