@@ -1,0 +1,75 @@
+/**
+ * CSV model for player stats exports.
+ * Defines stable header order and row mapping from service result objects.
+ */
+
+const CSV_HEADERS = [
+    'recordedAt',
+    'requestedFactionHofRank',
+    'sourceFactionId',
+    'sourceFactionName',
+    'playerId',
+    'name',
+    'level',
+    'ageDays',
+    'ageMonths',
+    'ageYears',
+    'hasFaction',
+    'hasCompany',
+    'factionName',
+    'companyName',
+    'hoursSinceLastAction',
+    'xanScore',
+    'tier',
+    'avgXanaxPerDay',
+    'allTimeXanaxTaken',
+    'xanaxTakenUntilLastMonth',
+    'xanaxTakenDuringLastMonth',
+    'statsAvailable',
+    'periodUsed',
+    'periodIsWindowed',
+    'xanaxMode',
+    'tornApiCallsUsed',
+];
+
+/**
+ * Build one CSV row from player stats.
+ * @param {object} stats
+ * @param {{ requestedFactionHofRank?: number|null, sourceFactionId?: number|null, sourceFactionName?: string|null }} [context]
+ * @returns {object}
+ */
+function buildPlayerStatsCsvRow(stats, context = {}) {
+    return {
+        recordedAt: new Date().toISOString(),
+        requestedFactionHofRank: context.requestedFactionHofRank ?? null,
+        sourceFactionId: context.sourceFactionId ?? null,
+        sourceFactionName: context.sourceFactionName ?? null,
+        playerId: stats.playerId,
+        name: stats.name,
+        level: stats.level,
+        ageDays: stats.ageDays,
+        ageMonths: stats.ageMonths,
+        ageYears: stats.ageYears,
+        hasFaction: stats.hasFaction,
+        hasCompany: stats.hasCompany,
+        factionName: stats.factionName,
+        companyName: stats.companyName,
+        hoursSinceLastAction: stats.hoursSinceLastAction,
+        xanScore: stats.xanScore,
+        tier: stats.tier,
+        avgXanaxPerDay: stats.avgXanaxPerDay,
+        allTimeXanaxTaken: stats.allTimeXanaxTaken,
+        xanaxTakenUntilLastMonth: stats.xanaxTakenUntilLastMonth,
+        xanaxTakenDuringLastMonth: stats.xanaxTakenDuringLastMonth,
+        statsAvailable: stats.statsAvailable,
+        periodUsed: stats.periodUsed,
+        periodIsWindowed: stats.periodIsWindowed,
+        xanaxMode: stats.xanaxMode,
+        tornApiCallsUsed: stats.tornApiCallsUsed,
+    };
+}
+
+module.exports = {
+    CSV_HEADERS,
+    buildPlayerStatsCsvRow,
+};

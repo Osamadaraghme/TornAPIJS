@@ -1,39 +1,28 @@
 /**
  * Run from project folder:
- *   PowerShell:
- *   $env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]
+ *   PowerShell: node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]
  *
- * Example:
- *   $env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js 3961724 "./player-stats.csv"
+ * Appends one row to the CSV (creates file with header if it does not exist).
+ * Default CSV path: `player-stats.csv` in the current directory, or set `TORN_STATS_CSV`.
  */
 
-const { writeActiveRankedPlayerByIdToCsv } = require('./src/services/active-ranked-player-by-id-csv.js');
-
-const apiKey = process.env.TORN_API_KEY;
-if (!apiKey) {
-    console.log('Usage (PowerShell): $env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]');
-    process.exit(1);
-}
+const { exportPlayerByIdToCsv } = require('./src/controllers/player-stats-csv-controller.js');
+const { printSuccess, printError } = require('./src/views/cli-output-view.js');
 
 const playerId = process.argv[2];
-const csvPath = process.argv[3] || 'player-stats.csv';
+const csvPath = process.argv[3];
 
 if (!playerId) {
-    console.log('Usage (PowerShell): $env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]');
+    console.log('Usage (PowerShell): node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]');
     process.exit(1);
 }
 
-writeActiveRankedPlayerByIdToCsv(playerId, csvPath)
+exportPlayerByIdToCsv(playerId, csvPath ? { csvPath } : {})
     .then((out) => {
-        console.log(JSON.stringify({
-            csvPath: out.csvPath,
-            fileCreated: out.fileCreated,
-            rowAdded: out.rowAdded,
-            result: out.playerStats,
-        }, null, 2));
+        printSuccess(out);
     })
     .catch((err) => {
-        console.error(err?.message || err);
+        printError(err);
         setTimeout(() => process.exit(1), 100);
     });
 

@@ -79,18 +79,19 @@ function computeScores({
 /**
  * Map a 0–100 score to tier S/A/B/C/D.
  * @param {number} finalScore0to100
- * @returns {'S'|'A'|'B'|'C'|'D'}
+ * @returns {'S'|'A'|'B'|'C'|'D'|'F'}
  */
 function tierForFinalScore(finalScore0to100) {
-    if (finalScore0to100 >= 75) return 'S';
-    if (finalScore0to100 >= 60) return 'A';
-    if (finalScore0to100 >= 40) return 'B';
-    if (finalScore0to100 >= 25) return 'C';
-    return 'D';
+    if (finalScore0to100 >= 90) return 'S';
+    if (finalScore0to100 >= 80) return 'A';
+    if (finalScore0to100 >= 70) return 'B';
+    if (finalScore0to100 >= 60) return 'C';
+    if (finalScore0to100 >= 50) return 'D';
+    return 'F';
 }
 
-/** Tier order for "or higher" filter: S > A > B > C > D. */
-const TIER_RANK = { S: 4, A: 3, B: 2, C: 1, D: 0 };
+/** Tier order for "or higher" filter: S > A > B > C > D > F. */
+const TIER_RANK = { S: 5, A: 4, B: 3, C: 2, D: 1, F: 0 };
 
 /** Valid tier filter values (excluding ALL). */
 const VALID_TIERS = Object.keys(TIER_RANK);

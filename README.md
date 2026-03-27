@@ -1,217 +1,129 @@
 # TornAPIJS
 
-Simple JS helpers for the [Torn City](https://www.torn.com) API — find recruitment candidates (random active players) and score them.
+CSV-first Torn recruitment APIs in JavaScript.
 
-### Project structure (refactored)
+All public APIs now write to CSV (create if missing, append if it exists).
 
-- **`src/constants.js`** — API URL, error messages, fatal error codes.
-- **`src/api/torn-client.js`** — Low-level Torn API (fetch user, faction, company); no business logic.
-- **`src/utils/`** — Helpers: `extractors.js` (profile/stats fields), `scoring.js` (xanax score & tier), `errors.js` (Torn errors & “no player found” messages), `helpers.js` (e.g. randomIntInclusive).
-- **`src/services/`** — Use cases: `random-active-ranked-player.js`, `active-ranked-player-by-id.js`, and CSV writer variant `active-ranked-player-by-id-csv.js`.
-- **`run-active-ranked.js`**, **`run-active-ranked-by-id.js`**, **`run-active-ranked-by-id-csv.js`** — CLI entry points.
-- Legacy re-exports were removed for the player-level and random-player proof-of-concepts.
+## Architecture (MVC + services)
 
----
+- `src/controllers/` - API controllers used by CLI and programmatic entry points
+- `src/models/` - CSV record model and column definitions
+- `src/views/` - CLI output formatting
+- `src/services/` - business logic and Torn API orchestration
+- `src/api/` - low-level Torn HTTP client with key failover
+- `src/utils/` - extractors, scoring, errors, helpers, CSV append utility
+- `src/index.js` - public CSV-only exports
 
-## How to run (Node.js)
+## API key behavior
 
-1. Install [Node.js](https://nodejs.org/) (v18+).
-2. Get a **public** API key from [Torn Preferences → API](https://www.torn.com/preferences.php#tab=api).
+- Default key pool is in `src/static-api-keys.js`.
+- Current default key is `Bf0F4qebJLvo2Mj0`.
+- You can override with `TORN_API_KEY`.
+- If Torn returns rate-limit code `5`, the client tries the next key in the pool.
 
----
+## Quick API list
 
-## Random active player + tier scoring (S/A/B/C/D)
+| API | What it does | CLI call |
+|---|---|---|
+| Random active ranked -> CSV | Finds one random active player by filters and appends one row | `node run-active-ranked.js 24 1 3000000 120 month C ANY ANY 15` |
+| Player by ID -> CSV | Fetches one player, computes monthly xanax delta fields, and appends one row | `node run-active-ranked-by-id-csv.js 3532802` |
+| Faction HoF rank -> CSV | Finds faction at HoF rank and appends one row per member | `node run-faction-hof-rank-csv.js 1 .\exports\player-stats.csv 20` |
 
-**Files:** `src/services/random-active-ranked-player.js`, `run-active-ranked.js`
+All three return JSON output that includes CSV metadata (`path`, `created`) and player/faction data while writing to CSV.
 
-Returns a random player who has been active in the last X hours. Response includes:
-- **playerId**, **name**, **level**, **ageDays**, **ageMonths**, **ageYears**
-- **xanScore** (0–100; based on avg xanax usage for the selected period window; 100% at ~3 xanax/day)
-- **tier** (S/A/B/C/D)
-- **hasFaction** (true/false) — whether the player is in a faction
-- **hasCompany** (true/false) — whether the player has a job/company
-- **factionName** (string or null) — name of the player's faction, if any
-- **companyName** (string or null) — name of the player's company/job, if any
-- **hoursSinceLastAction**, xanax averages, **statsAvailable**, **periodUsed**
-- **totalXanaxAllTime** — all-time xanax total from Torn v2 personalstats
-- **totalXanaxLastMonth** — timestamped month xanax total from Torn v2 personalstats
-- **avgLastMonth** — `(totalXanaxAllTime - totalXanaxLastMonth) / 30.4375`
-- **periodIsWindowed** (boolean) — `true` if Torn returned windowed xanax data for the period; `false` if only lifetime stats were available (then averages are derived from lifetime total ÷ account age). When `period=month` and this is `false`, the recruitment score applies a recency-based multiplier using `hoursSinceLastAction` to be more responsive to recent intake.
-- **xanaxMode** (`"fast"` or `"probe"`) — scoring mode used for xanax fallback behavior.
-- **tornApiCallsUsed** (number) — how many Torn API requests were made for this run (useful for staying under the 100/min limit)
+## Random active ranked API
 
-Run (PowerShell):
+Run:
 
 ```powershell
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js
+node run-active-ranked.js
 ```
 
-Optional args (all positional):
+Arguments:
 
 ```text
-ACTIVE_HOURS  MIN_ID  MAX_ID  MAX_TRIES  PERIOD(day|month)  TIER  HAS_FACTION  HAS_COMPANY  [MIN_LEVEL]
+ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD(day|month) TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL] [CSV_PATH]
 ```
 
-- **ACTIVE_HOURS**: how many hours back to consider someone “active”.  
-  Example: `24` = active in the last 24 hours.
-- **MIN_ID**: lowest user ID to try when picking random players (usually `1`).
-- **MAX_ID**: highest user ID to try (e.g. `3000000`).
-- **MAX_TRIES**: maximum random attempts before giving up (e.g. `120`).  
-  Higher value = more time trying to find a matching player.
-- **PERIOD**: `"day"` or `"month"` — requested xanax window; if Torn returns only lifetime stats, we use lifetime total ÷ account age and set **periodIsWindowed: false**.
-- **Xanax mode (env)**: set `TORN_XANAX_MODE=fast` (default) or `TORN_XANAX_MODE=probe`.
-- **TIER**: `"S"|"A"|"B"|"C"|"D"|"ALL"` (not case-sensitive). Returns a player at **this tier or higher** (e.g. `C` = C, B, A, or S; `S` = S only). `"ALL"` = ignore tier.
-- **HAS_FACTION**: `Y` = only in a faction, `N` = only factionless, `ANY` or omit = don't care (case-insensitive).
-- **HAS_COMPANY**: `Y` = only with a job/company, `N` = only without, `ANY` or omit = don't care (case-insensitive).
-- **MIN_LEVEL** (optional): only return players with level ≥ this (e.g. `20`). Omit for no minimum.
+Tier behavior (`TIER` is case-insensitive):
+- `S` -> S only
+- `A` -> A or S
+- `B` -> B, A, or S
+- `C` -> C, B, A, or S
+- `D` -> D, C, B, A, or S
+- `F` -> any tier
+- `ALL` -> ignore tier filter
+
+Tier score ranges (`xanScore`):
+- `S`: `>= 90`
+- `A`: `>= 80` and `< 90`
+- `B`: `>= 70` and `< 80`
+- `C`: `>= 60` and `< 70`
+- `D`: `>= 50` and `< 60`
+- `F`: `< 50`
+
+Examples:
 
 ```powershell
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
+node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
+node run-active-ranked.js 24 1 3000000 120 month C N ANY 15 .\exports\player-stats.csv
 ```
 
-### Tier filter
+## Player by ID API
 
-TIER means **this tier or higher**: e.g. `C` returns a player who is C, B, A, or S; `B` returns B, A, or S; `S` returns S only.
-
-```powershell
-# Any active player, ignore tiers
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month ALL
-
-# S-tier only (highest)
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month s
-
-# A-tier or higher (A or S)
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month A
-
-# C-tier or higher (C, B, A, or S)
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked.js 24 1 3000000 120 month C
-```
-
-### Faction and company filters
+Run:
 
 ```powershell
-# Only players in a faction
-$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL Y ANY
-
-# Only factionless players
-$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL N ANY
-
-# Only players with a company/job
-$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY Y
-
-# Only players without a company
-$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL ANY N
-
-# Factionless, no company
-$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 120 month ALL N N
-```
-
-### Recruitment use case
-
-The API is well-suited to finding **recruitment candidates**: active players who meet your tier/level/faction criteria.
-
-**Suggested parameters:**
-
-| Goal | Example |
-|------|--------|
-| Factionless, so you can recruit them | `HAS_FACTION=N` |
-| Minimum engagement (tier C or better) | `TIER=C` |
-| Only players level 20+ | Add `MIN_LEVEL=20` as 10th arg |
-| Active in last 12–24h | `ACTIVE_HOURS=24` (or `12`) |
-| More candidates to choose from | Increase `MAX_TRIES` (e.g. `200`) |
-
-**Example — factionless, tier C or higher, level 15+, active in 24h:**
-
-```powershell
-$env:TORN_API_KEY="your_key"; node run-active-ranked.js 24 1 3000000 200 month C N ANY 15
-```
-
-**Tips:**
-
-- **Rate limit:** Torn allows 100 API calls/minute. Each “try” is 1 call; a match adds 0–2 for faction/company names. Keep `MAX_TRIES` &lt; 100 per run or add a short delay between runs.
-- **Narrow ID range:** Use a higher `MIN_ID` (e.g. `100000`) to skip very old accounts if you prefer.
-- **Programmatic use:** Require `./src/services/random-active-ranked-player.js` and call `getRandomActiveRankedPlayer(apiKey, { minLevel: 20, tier: 'B', hasFaction: 'N', ... })` to integrate into your own recruitment script.
-
-### API call count
-
-Every successful response includes **tornApiCallsUsed**: the number of requests made to Torn's API for that run. To minimize calls, each try uses one combined user request (profile + personalstats). Typical run: each extra “try” (random ID checked) adds 1 call per try; only the chosen player gets 0–2 extra calls for faction/company names. Torn allows 100 calls per minute per user, so you can gauge how often you can run the script.
-
-Xanax mode impact:
-- `fast` (default): low-call mode for recruitment; when month-window xanax is unavailable, applies recency-weighted fallback.
-- `probe`: disables that recency fallback for random mode and keeps raw API-derived xanax inputs.
-
-### Errors
-
-The script returns clear errors instead of a single generic message:
-
-- **No API key** — `Torn API key is required.`
-- **Invalid key / rate limit / IP block / key paused** — If Torn returns a fatal error (empty key, wrong key, too many requests, IP block, API disabled, key in jail, key paused), the script throws immediately with Torn's error message so you don't burn through all tries.
-- **Every request failed** — e.g. `Every Torn API request failed (120 attempts). Check your API key...`
-- **No one active** — e.g. `No players were active in the last 24 hours after 50 profile checks (50 API calls). Try increasing activeWithinHours or maxTries.`
-- **No match for tier** — e.g. `No active player matched your tier filter (S) after 30 candidates (65 API calls). Try a different tier or increase maxTries.`
-- **No match for filters** — e.g. `Could not find an active player matching your filters (last 24h, 120 tries, 122 API calls). Try increasing maxTries or relaxing tier/faction/company filters.`
-
-See [Torn API docs](https://www.torn.com/api.html) for full error codes (e.g. 2 = wrong key, 5 = rate limit, 7 = private data).
-
-Note: If Torn API does not allow `personalstats` for the chosen player, scores will be `0` and the player will rank `D` with `statsAvailable: false`.
-
----
-
-## Active ranked player by ID (no random probing)
-
-If you already have a `playerId` (for recruitment), this endpoint returns the same response shape as the random active-ranked API, but for that exact ID.
-
-**Files:** `src/services/active-ranked-player-by-id.js`, `run-active-ranked-by-id.js`
-
-Run (PowerShell):
-
-```powershell
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked-by-id.js PLAYER_ID
-```
-
-Scoring period and **periodIsWindowed**:
-- The response includes the player's Torn profile age as **ageDays**, **ageMonths**, and **ageYears**.
-- The response also includes **totalXanaxAllTime**, **totalXanaxLastMonth**, and **avgLastMonth** from Torn v2 personalstats calls.
-- Period is `month` by default (set `TORN_SCORE_PERIOD=day` for day). We request windowed personalstats from Torn; if the API returns only lifetime `xantaken`, we use lifetime total ÷ account age for averages and set **periodIsWindowed: false** in the response.
-- When **periodIsWindowed** is `false`, **avgXanaxPerDay** is derived from all-time xanax ÷ account age, not from a true “last month” window.
-- Set `TORN_XANAX_MODE=fast` (default) for low API call count, or `TORN_XANAX_MODE=probe` for deeper xanax probing (more API calls) on by-id lookups.
-- By-id call count guidance: `fast` is typically ~2-3 API calls (user + optional faction/company name lookups), while `probe` may be significantly higher.
-
-Example:
-
-```powershell
-$env:TORN_API_KEY="your_key"; node run-active-ranked-by-id.js 1865163
-```
-
- 
-Note: this endpoint does not apply activity/tier/faction/company filters; it just calculates and returns the scoring response for the given ID.
-
----
-
-## Active ranked player by ID -> CSV file
-
-If you want to save player stats to a CSV file (instead of printing full stats JSON), use the CSV variant.
-
-**Files:** `src/services/active-ranked-player-by-id-csv.js`, `run-active-ranked-by-id-csv.js`
-
-Run (PowerShell):
-
-```powershell
-$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]
+node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]
 ```
 
 Examples:
 
 ```powershell
-# Writes to ./player-stats.csv by default
-$env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js 3961724
-
-# Writes to a custom CSV path
-$env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js 3961724 ".\exports\player-stats.csv"
+node run-active-ranked-by-id-csv.js 3532802
+node run-active-ranked-by-id-csv.js 3532802 .\exports\player-stats.csv
 ```
 
-Behavior:
-- If the CSV file does **not** exist: creates it and writes a header row, then adds one player row.
-- If the CSV file **already exists**: appends a new row.
-- Console output confirms `csvPath`, `fileCreated`, and `rowAdded`.
+## Faction HoF rank API
 
+Run:
+
+```powershell
+node run-faction-hof-rank-csv.js HOF_RANK [CSV_PATH] [MAX_PLAYERS]
+# short form using default CSV:
+node run-faction-hof-rank-csv.js HOF_RANK MAX_PLAYERS
+```
+
+Examples:
+
+```powershell
+node run-faction-hof-rank-csv.js 1
+node run-faction-hof-rank-csv.js 1 .\exports\player-stats.csv
+node run-faction-hof-rank-csv.js 1 .\exports\player-stats.csv 20
+```
+
+## CSV defaults
+
+- Each API has its own static default CSV file:
+  - random API: `./exports/random-active-ranked-player-stats.csv`
+  - by-id API: `./exports/active-ranked-player-by-id-stats.csv`
+  - faction HoF API: `./exports/faction-hof-rank-player-stats.csv`
+- You can override CSV per call with CLI `[CSV_PATH]` argument.
+- Optional env overrides per API:
+  - `TORN_RANDOM_STATS_CSV`
+  - `TORN_BY_ID_STATS_CSV`
+  - `TORN_FACTION_HOF_STATS_CSV`
+- Optional global fallback override: `TORN_STATS_CSV`
+- Optional member cap for HoF export: `TORN_FACTION_MEMBER_LIMIT`
+
+## Notes on xanax window accuracy
+
+- Xanax month fields now use Torn v2 cumulative snapshots:
+  - all-time `xantaken`
+  - `xantaken` at last-month timestamp
+  - `xanaxTakenDuringLastMonth = allTimeXanaxTaken - xanaxTakenUntilLastMonth`
+- New output fields on all APIs:
+  - `allTimeXanaxTaken`
+  - `xanaxTakenUntilLastMonth`
+  - `xanaxTakenDuringLastMonth`
+  - `avgXanaxPerDay` (derived from last-month delta / average days per month)

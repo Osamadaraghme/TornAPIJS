@@ -1,103 +1,40 @@
 /**
- * Service: write active-ranked player-by-id stats to CSV.
- *
- * Uses the existing by-id stats API, then writes one CSV row:
- * - If file exists: append row
- * - If file does not exist: create with header, then append row
+ * Same player stats as `getActiveRankedPlayerById`, but appends one row to a CSV file
+ * instead of returning JSON for display. If the file does not exist, it is created with a header row.
  */
 
-const fs = require('fs/promises');
-const path = require('path');
 const { getActiveRankedPlayerById } = require('./active-ranked-player-by-id.js');
-
-const CSV_HEADERS = [
-    'collectedAtIso',
-    'playerId',
-    'name',
-    'level',
-    'ageDays',
-    'ageMonths',
-    'ageYears',
-    'hasFaction',
-    'hasCompany',
-    'factionName',
-    'companyName',
-    'hoursSinceLastAction',
-    'xanScore',
-    'tier',
-    'avgXanaxPerDay',
-    'totalXanaxAllTime',
-    'totalXanaxLastMonth',
-    'avgLastMonth',
-    'statsAvailable',
-    'periodUsed',
-    'periodIsWindowed',
-    'xanaxMode',
-    'tornApiCallsUsed',
-];
+const { appendCsvRow } = require('../utils/csv-append.js');
+const { DEFAULT_BY_ID_STATS_CSV_PATH } = require('../constants.js');
+const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 
 /**
- * Escape a single CSV value according to RFC-style CSV rules.
- * @param {unknown} value
- * @returns {string}
+ * Fetch player stats and append them as one CSV row.
+ * @param {number|string} playerId - Torn user ID
+ * @param {object} [options]
+ * @param {string} [options.csvPath] - Output CSV path (default: `active-ranked-player-by-id-stats.csv`)
+ * @returns {Promise<{ path: string, created: boolean, data: object }>}
  */
-function csvEscape(value) {
-    if (value == null) return '';
-    const s = String(value);
-    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-}
+async function getActiveRankedPlayerByIdToCsv(playerId, options = {}) {
+    const csvPath = options.csvPath
+        ?? process.env.TORN_BY_ID_STATS_CSV
+        ?? process.env.TORN_STATS_CSV
+        ?? DEFAULT_BY_ID_STATS_CSV_PATH;
 
-/**
- * Convert a stats object to one CSV row string (without trailing newline).
- * @param {object} stats
- * @returns {string}
- */
-function toCsvRow(stats) {
-    const row = {
-        collectedAtIso: new Date().toISOString(),
-        ...stats,
-    };
-    return CSV_HEADERS.map((h) => csvEscape(row[h])).join(',');
-}
-
-/**
- * Write one player stats record to CSV.
- *
- * @param {number|string} playerId
- * @param {string} [csvFilePath='player-stats.csv'] absolute or relative path
- * @returns {Promise<{ csvPath: string, fileCreated: boolean, rowAdded: boolean, playerStats: object }>}
- */
-async function writeActiveRankedPlayerByIdToCsv(playerId, csvFilePath = 'player-stats.csv') {
     const stats = await getActiveRankedPlayerById(playerId);
 
-    const resolvedPath = path.resolve(csvFilePath);
-    const dir = path.dirname(resolvedPath);
-    await fs.mkdir(dir, { recursive: true });
+    const row = buildPlayerStatsCsvRow(stats);
 
-    let exists = true;
-    try {
-        await fs.access(resolvedPath);
-    } catch {
-        exists = false;
-    }
-
-    if (!exists) {
-        await fs.writeFile(resolvedPath, `${CSV_HEADERS.join(',')}\n`, 'utf8');
-    }
-
-    const line = `${toCsvRow(stats)}\n`;
-    await fs.appendFile(resolvedPath, line, 'utf8');
+    const { path: resolvedPath, created } = appendCsvRow(csvPath, CSV_HEADERS, row);
 
     return {
-        csvPath: resolvedPath,
-        fileCreated: !exists,
-        rowAdded: true,
-        playerStats: stats,
+        path: resolvedPath,
+        created,
+        data: stats,
     };
 }
 
 module.exports = {
-    writeActiveRankedPlayerByIdToCsv,
+    getActiveRankedPlayerByIdToCsv,
+    CSV_HEADERS,
 };
-

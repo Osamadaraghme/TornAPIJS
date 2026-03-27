@@ -1,18 +1,67 @@
 # Release notes
 
+## v2.0.0
+
+**Release date:** 2026
+
+### Highlights
+
+- Migrated public APIs to **CSV-first** behavior:
+  - `getRandomActiveRankedPlayerToCsv`
+  - `getActiveRankedPlayerByIdToCsv`
+  - `getFactionPlayersByHofRankToCsv`
+- Added MVC-style layering for readability:
+  - `src/controllers/`
+  - `src/models/`
+  - `src/views/`
+- Added static Torn key pool with failover support in API client.
+- Added robust CSV writer behavior:
+  - auto-create directories/files
+  - auto-ensure header line exists at line 1
+  - retry and clear messaging on Windows file lock errors
+- Added per-API static default CSV paths under `./exports/` with optional overrides.
+
+### Xanax calculation changes
+
+- Replaced ambiguous month extraction with explicit v2 snapshot delta method:
+  - `allTimeXanaxTaken` from `/v2/user/:id/personalstats?stat=xantaken`
+  - `xanaxTakenUntilLastMonth` from same endpoint with `timestamp=...`
+  - `xanaxTakenDuringLastMonth = allTimeXanaxTaken - xanaxTakenUntilLastMonth`
+- `avgXanaxPerDay` now derives from last-month delta only.
+- Removed `avgXanaxPerMonth` from responses/CSV.
+- Typical by-id API call count reduced to **3** when faction/company names are available from profile.
+
+### Tier system update
+
+- Updated tier thresholds:
+  - **S** `>= 90`
+  - **A** `>= 80`
+  - **B** `>= 70`
+  - **C** `>= 60`
+  - **D** `>= 50`
+  - **F** `< 50`
+- Added `F` tier to ranking/filter order.
+
+### CLI improvements
+
+- `run-faction-hof-rank-csv.js` now supports short syntax:
+  - `node run-faction-hof-rank-csv.js HOF_RANK MAX_PLAYERS`
+  - example: `node run-faction-hof-rank-csv.js 1 5`
+- Existing syntax remains supported:
+  - `node run-faction-hof-rank-csv.js HOF_RANK [CSV_PATH] [MAX_PLAYERS]`
+
+---
+
 ## v1.0.2 (latest patch updates)
 
 ### Post-release updates
 
 - Added **ageDays**, **ageMonths**, and **ageYears** to both APIs (`random-active-ranked-player` and `active-ranked-player-by-id`).
-- Replaced duplicated xanax totals with canonical fields: **totalXanaxAllTime**, **totalXanaxLastMonth**, and **avgLastMonth**.
-- Added Torn **v2 personalstats** integration for accurate month/all-time xanax totals in responses.
-- Updated last-month average formula to: `(totalXanaxAllTime - totalXanaxLastMonth) / 30.4375`.
+- Added **allTimeXanaxTaken** to both APIs (lifetime `xantaken` from Torn `personalstats`).
 - Added **xanaxMode** response field and unified env switch `TORN_XANAX_MODE=fast|probe`.
 - Set **fast mode as default** for lower API usage and recruitment readiness.
 - Optimized by-id call behavior in fast mode (minimal calls); kept probe mode for deeper xanax diagnostics when needed.
-- Added CSV writer API/CLI (`active-ranked-player-by-id-csv`) that creates file+header when missing and appends rows when present.
-- Updated CLI headers and README docs to reflect the new fields, mode switch, CSV flow, and API-call expectations.
+- Updated CLI headers and README docs to reflect the new fields, mode switch, and API-call expectations.
 
 ---
 
@@ -29,7 +78,7 @@
 
 ### Summary
 
-- **New recruitment helper:** use `run-active-ranked-by-id.js` / `getActiveRankedPlayerById(playerId)` when you already have an ID.
+- **New recruitment helper:** use `run-active-ranked-by-id-csv.js` / `getActiveRankedPlayerByIdToCsv(playerId)` when you already have an ID.
 - **Softer scoring:** lowered the full xanax score bar from 3.25 to 3 xanax/day, producing higher numeric scores and tiers for the same usage.
 
 ---
