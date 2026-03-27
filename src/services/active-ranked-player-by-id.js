@@ -8,7 +8,7 @@
  * `process.env.TORN_API_KEY`).
  */
 
-const { fetchUser, fetchFactionName, fetchCompanyName } = require('../api/torn-client.js');
+const { fetchUser, fetchFactionName, fetchCompanyName, fetchUserPersonalStatV2 } = require('../api/torn-client.js');
 const {
     extractLastActionTimestampSeconds,
     extractName,
@@ -36,7 +36,7 @@ const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH } = require('../constants.js'
  * @param {{ value: number }} counter - API call counter
  * @returns {object} Result shape; factionName/companyName filled by caller
  */
-function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal) {
+function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal, xanTakenLastMonth) {
     const name = extractName(profileData);
     const level = extractLevel(profileData);
     const hasFaction = hasFactionFromProfile(profileData);
@@ -55,6 +55,9 @@ function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanT
     const factionId = extractFactionId(profileData);
     const companyId = extractCompanyId(profileData);
     const companyNameFromProfile = extractCompanyNameFromProfile(profileData);
+    const lastMonthDelta = (Number.isFinite(xanTakenTotal) && Number.isFinite(xanTakenLastMonth))
+        ? Math.max(0, xanTakenTotal - xanTakenLastMonth)
+        : null;
 
     return {
         playerId: Number(id),
@@ -71,8 +74,9 @@ function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanT
         xanScore: Number(xanScorePct.toFixed(2)),
         tier,
         avgXanaxPerDay: scores.avgXanaxPerDay != null ? Number(scores.avgXanaxPerDay.toFixed(4)) : null,
-        avgXanaxPerMonth: scores.avgXanaxPerMonth != null ? Number(scores.avgXanaxPerMonth.toFixed(2)) : null,
-        allTimeXanaxTaken: xanTakenTotal != null ? Number(xanTakenTotal) : null,
+        totalXanaxAllTime: xanTakenTotal != null ? Number(xanTakenTotal) : null,
+        totalXanaxLastMonth: xanTakenLastMonth != null ? Number(xanTakenLastMonth) : null,
+        avgLastMonth: lastMonthDelta != null ? Number((lastMonthDelta / AVG_DAYS_PER_MONTH).toFixed(4)) : null,
         statsAvailable: Boolean(scores.statsAvailable) && Boolean(ps),
         periodUsed: period,
         tornApiCallsUsed: counter.value,
@@ -143,12 +147,13 @@ async function getActiveRankedPlayerById(playerId) {
     // Fast/default path: use a single user call for by-id scoring.
     // If Torn doesn't expose a window field, this falls back to lifetime stats from
     // the same payload; no extra probing calls by default.
-    const xanTakenTotal = psWindow ? extractXanaxTaken(psWindow) : null;
+    let xanTakenTotal = psWindow ? extractXanaxTaken(psWindow) : null;
     const xanTakenWindow = psWindow ? extractXanaxTaken(psWindow) : null;
     let xanTakenForPeriod = psWindow ? extractXanaxTakenForPeriod(psWindow, period) : null;
 
     let periodIsWindowed = xanTakenForPeriod != null;
     let psForPeriod = psWindow;
+    let xanTakenLastMonth = null;
 
     // Optional heavy probe mode (disabled by default to minimize API calls).
     // Enable with `TORN_XANAX_MODE=probe` for deeper troubleshooting.
@@ -260,10 +265,6 @@ async function getActiveRankedPlayerById(playerId) {
         }
     }
 
-    // Optional web scrape fallback:
-    // If Torn's `personalstats` response still doesn't provide windowed
-    // month/day xanax totals for your key/public access, pull it from
-    // Torn's web personalstats page instead.
     if (debug && psWindow && typeof psWindow === 'object') {
         const xanKeysLifetime = psLifetime
             ? Object.keys(psLifetime).filter((k) => /xantaken|xanax[_-]?taken/i.test(k.toLowerCase()))
@@ -291,6 +292,26 @@ async function getActiveRankedPlayerById(playerId) {
         console.log('[debug] xanax mode TORN_XANAX_MODE =', xanaxMode);
     }
 
+    // Accurate last-month xanax via Torn v2 personalstats timestamp query.
+    // Keep all-time total from the existing user payload to avoid an extra call.
+    let v2LastMonth = null;
+    try {
+        const lastMonthResp = await fetchUserPersonalStatV2(normalizedId, 'xantaken', apiKey, counter, personalStatsFrom);
+        v2LastMonth = lastMonthResp.value;
+    } catch {
+        // keep null
+    }
+    if (Number.isFinite(v2LastMonth)) {
+        xanTakenLastMonth = v2LastMonth;
+        const lastMonthDelta = Number.isFinite(xanTakenTotal)
+            ? Math.max(0, xanTakenTotal - v2LastMonth)
+            : null;
+        if (period === 'month' && Number.isFinite(lastMonthDelta)) {
+            xanTakenForPeriod = lastMonthDelta;
+            periodIsWindowed = true;
+        }
+    }
+
     const ageDays = extractAgeDays(profileData);
 
     const scores = computeScores({
@@ -300,7 +321,17 @@ async function getActiveRankedPlayerById(playerId) {
         period,
     });
 
-    const result = buildResult(normalizedId, profileData, scores, period, psForPeriod, counter, ageDays, xanTakenTotal);
+    const result = buildResult(
+        normalizedId,
+        profileData,
+        scores,
+        period,
+        psForPeriod,
+        counter,
+        ageDays,
+        xanTakenTotal,
+        xanTakenLastMonth,
+    );
     result.periodIsWindowed = periodIsWindowed;
     result.xanaxMode = xanaxMode;
 

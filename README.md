@@ -7,8 +7,8 @@ Simple JS helpers for the [Torn City](https://www.torn.com) API — find recruit
 - **`src/constants.js`** — API URL, error messages, fatal error codes.
 - **`src/api/torn-client.js`** — Low-level Torn API (fetch user, faction, company); no business logic.
 - **`src/utils/`** — Helpers: `extractors.js` (profile/stats fields), `scoring.js` (xanax score & tier), `errors.js` (Torn errors & “no player found” messages), `helpers.js` (e.g. randomIntInclusive).
-- **`src/services/`** — Use cases: `random-active-ranked-player.js` and `active-ranked-player-by-id.js`. Each uses the API client and utils.
-- **`run-active-ranked.js`** — CLI entry point.
+- **`src/services/`** — Use cases: `random-active-ranked-player.js`, `active-ranked-player-by-id.js`, and CSV writer variant `active-ranked-player-by-id-csv.js`.
+- **`run-active-ranked.js`**, **`run-active-ranked-by-id.js`**, **`run-active-ranked-by-id-csv.js`** — CLI entry points.
 - Legacy re-exports were removed for the player-level and random-player proof-of-concepts.
 
 ---
@@ -33,7 +33,9 @@ Returns a random player who has been active in the last X hours. Response includ
 - **factionName** (string or null) — name of the player's faction, if any
 - **companyName** (string or null) — name of the player's company/job, if any
 - **hoursSinceLastAction**, xanax averages, **statsAvailable**, **periodUsed**
-- **allTimeXanaxTaken** — lifetime xanax usage from Torn `personalstats`
+- **totalXanaxAllTime** — all-time xanax total from Torn v2 personalstats
+- **totalXanaxLastMonth** — timestamped month xanax total from Torn v2 personalstats
+- **avgLastMonth** — `(totalXanaxAllTime - totalXanaxLastMonth) / 30.4375`
 - **periodIsWindowed** (boolean) — `true` if Torn returned windowed xanax data for the period; `false` if only lifetime stats were available (then averages are derived from lifetime total ÷ account age). When `period=month` and this is `false`, the recruitment score applies a recency-based multiplier using `hoursSinceLastAction` to be more responsive to recent intake.
 - **xanaxMode** (`"fast"` or `"probe"`) — scoring mode used for xanax fallback behavior.
 - **tornApiCallsUsed** (number) — how many Torn API requests were made for this run (useful for staying under the 100/min limit)
@@ -169,9 +171,9 @@ $env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked-by-id.js PLAYER
 
 Scoring period and **periodIsWindowed**:
 - The response includes the player's Torn profile age as **ageDays**, **ageMonths**, and **ageYears**.
-- The response includes **allTimeXanaxTaken** (lifetime `xantaken`).
+- The response also includes **totalXanaxAllTime**, **totalXanaxLastMonth**, and **avgLastMonth** from Torn v2 personalstats calls.
 - Period is `month` by default (set `TORN_SCORE_PERIOD=day` for day). We request windowed personalstats from Torn; if the API returns only lifetime `xantaken`, we use lifetime total ÷ account age for averages and set **periodIsWindowed: false** in the response.
-- When **periodIsWindowed** is `false`, **avgXanaxPerMonth** / **avgXanaxPerDay** are derived from all-time xanax ÷ account age, not from a true “last month” window (the Torn user API does not expose windowed personalstats in the response we receive).
+- When **periodIsWindowed** is `false`, **avgXanaxPerDay** is derived from all-time xanax ÷ account age, not from a true “last month” window.
 - Set `TORN_XANAX_MODE=fast` (default) for low API call count, or `TORN_XANAX_MODE=probe` for deeper xanax probing (more API calls) on by-id lookups.
 - By-id call count guidance: `fast` is typically ~2-3 API calls (user + optional faction/company name lookups), while `probe` may be significantly higher.
 
@@ -183,4 +185,33 @@ $env:TORN_API_KEY="your_key"; node run-active-ranked-by-id.js 1865163
 
  
 Note: this endpoint does not apply activity/tier/faction/company filters; it just calculates and returns the scoring response for the given ID.
+
+---
+
+## Active ranked player by ID -> CSV file
+
+If you want to save player stats to a CSV file (instead of printing full stats JSON), use the CSV variant.
+
+**Files:** `src/services/active-ranked-player-by-id-csv.js`, `run-active-ranked-by-id-csv.js`
+
+Run (PowerShell):
+
+```powershell
+$env:TORN_API_KEY="your_16_char_api_key"; node run-active-ranked-by-id-csv.js PLAYER_ID [CSV_PATH]
+```
+
+Examples:
+
+```powershell
+# Writes to ./player-stats.csv by default
+$env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js 3961724
+
+# Writes to a custom CSV path
+$env:TORN_API_KEY="your_key"; node run-active-ranked-by-id-csv.js 3961724 ".\exports\player-stats.csv"
+```
+
+Behavior:
+- If the CSV file does **not** exist: creates it and writes a header row, then adds one player row.
+- If the CSV file **already exists**: appends a new row.
+- Console output confirms `csvPath`, `fileCreated`, and `rowAdded`.
 

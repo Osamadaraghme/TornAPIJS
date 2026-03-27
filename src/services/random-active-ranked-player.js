@@ -8,7 +8,7 @@
  * fetched for the final chosen player.
  */
 
-const { fetchUser, fetchFactionName, fetchCompanyName } = require('../api/torn-client.js');
+const { fetchUser, fetchFactionName, fetchCompanyName, fetchUserPersonalStatV2 } = require('../api/torn-client.js');
 const {
     extractLastActionTimestampSeconds,
     extractName,
@@ -69,7 +69,7 @@ function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) 
  * @param {{ value: number }} counter - API call counter
  * @returns {object} Result shape; factionName/companyName filled by caller
  */
-function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal) {
+function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal, xanTakenLastMonth) {
     const name = extractName(profileData);
     const level = extractLevel(profileData);
     const hasFaction = hasFactionFromProfile(profileData);
@@ -85,6 +85,9 @@ function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanT
     const factionId = extractFactionId(profileData);
     const companyId = extractCompanyId(profileData);
     const companyNameFromProfile = extractCompanyNameFromProfile(profileData);
+    const lastMonthDelta = (Number.isFinite(xanTakenTotal) && Number.isFinite(xanTakenLastMonth))
+        ? Math.max(0, xanTakenTotal - xanTakenLastMonth)
+        : null;
 
     return {
         playerId: Number(id),
@@ -101,8 +104,9 @@ function buildResult(id, profileData, scores, period, ps, counter, ageDays, xanT
         xanScore: Number(xanScorePct.toFixed(2)),
         tier,
         avgXanaxPerDay: scores.avgXanaxPerDay != null ? Number(scores.avgXanaxPerDay.toFixed(4)) : null,
-        avgXanaxPerMonth: scores.avgXanaxPerMonth != null ? Number(scores.avgXanaxPerMonth.toFixed(2)) : null,
-        allTimeXanaxTaken: xanTakenTotal != null ? Number(xanTakenTotal) : null,
+        totalXanaxAllTime: xanTakenTotal != null ? Number(xanTakenTotal) : null,
+        totalXanaxLastMonth: xanTakenLastMonth != null ? Number(xanTakenLastMonth) : null,
+        avgLastMonth: lastMonthDelta != null ? Number((lastMonthDelta / AVG_DAYS_PER_MONTH).toFixed(4)) : null,
         statsAvailable: Boolean(scores.statsAvailable) && Boolean(ps),
         periodUsed: period,
         tornApiCallsUsed: counter.value,
@@ -195,7 +199,7 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         const ps = data?.personalstats != null
             ? (data.personalstats.personalstats ?? data.personalstats)
             : null;
-        const xanTakenTotal = ps ? extractXanaxTaken(ps) : null;
+        let xanTakenTotal = ps ? extractXanaxTaken(ps) : null;
         const xanTakenForPeriod = ps ? extractXanaxTakenForPeriod(ps, period) : null;
         const ageDays = extractAgeDays(profileData);
 
@@ -231,8 +235,32 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
             continue;
         }
 
-        const result = buildResult(id, profileData, scores, period, ps, counter, ageDays, xanTakenTotal);
-        result.periodIsWindowed = xanTakenForPeriod != null;
+        // Enrich final response with accurate v2 totals without affecting per-try search cost.
+        let xanTakenLastMonth = null;
+        try {
+            const lastMonthResp = await fetchUserPersonalStatV2(id, 'xantaken', apiKey, counter, personalStatsFrom);
+            if (Number.isFinite(lastMonthResp.value)) xanTakenLastMonth = lastMonthResp.value;
+        } catch {
+            // keep null
+        }
+
+        // Recompute output scores from v2 last-month delta when available.
+        let outputScores = scores;
+        if (period === 'month' && Number.isFinite(xanTakenTotal) && Number.isFinite(xanTakenLastMonth)) {
+            const lastMonthDelta = Math.max(0, xanTakenTotal - xanTakenLastMonth);
+            outputScores = computeScores({
+                xanaxTakenTotal: xanTakenTotal,
+                xanaxTakenForPeriod: lastMonthDelta,
+                ageDays,
+                period,
+                avgXanaxPerDayMultiplier: 1,
+            });
+        }
+
+        const result = buildResult(id, profileData, outputScores, period, ps, counter, ageDays, xanTakenTotal, xanTakenLastMonth);
+        result.periodIsWindowed = (period === 'month' && Number.isFinite(xanTakenTotal) && Number.isFinite(xanTakenLastMonth))
+            ? true
+            : (xanTakenForPeriod != null);
         result.xanaxMode = xanaxMode;
 
         // Fetch names only for the chosen player

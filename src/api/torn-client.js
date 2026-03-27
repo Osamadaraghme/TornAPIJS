@@ -73,8 +73,106 @@ async function fetchCompanyName(companyId, apiKey, counter) {
     }
 }
 
+/**
+ * Best-effort extract numeric stat value from Torn v2 personalstats response.
+ * Handles a few response shapes defensively.
+ * @param {object} data
+ * @param {string} statName
+ * @returns {number|null}
+ */
+function extractV2PersonalStatValue(data, statName) {
+    const toNum = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    };
+    const pickFromObj = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        for (const k of ['value', 'total', 'count', 'amount', 'month', 'last_month', 'lastMonth', 'current']) {
+            const n = toNum(obj[k]);
+            if (n != null) return n;
+        }
+        return null;
+    };
+
+    const direct = toNum(data?.[statName]);
+    if (direct != null) return direct;
+
+    const statsDirect = toNum(data?.stats?.[statName]);
+    if (statsDirect != null) return statsDirect;
+
+    const personalDirect = toNum(data?.personalstats?.[statName]);
+    if (personalDirect != null) return personalDirect;
+
+    const personalObj = pickFromObj(data?.personalstats?.[statName]);
+    if (personalObj != null) return personalObj;
+
+    // Array shape support: [{ name: 'xantaken', value: 123 }]
+    const scanArrays = [data?.personalstats, data?.stats, data];
+    for (const arr of scanArrays) {
+        if (!Array.isArray(arr)) continue;
+        for (const item of arr) {
+            if (!item || typeof item !== 'object') continue;
+            const key = String(item.name ?? item.stat ?? item.key ?? '').toLowerCase();
+            if (key === String(statName).toLowerCase()) {
+                const itemNum = toNum(item.value) ?? toNum(item.total) ?? toNum(item.count) ?? toNum(item.amount);
+                if (itemNum != null) return itemNum;
+                const nested = pickFromObj(item);
+                if (nested != null) return nested;
+            }
+        }
+    }
+
+    // Generic recursive scan for exact stat key.
+    const stack = [data];
+    while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== 'object') continue;
+        for (const [k, v] of Object.entries(cur)) {
+            if (k === statName) {
+                const n = toNum(v);
+                if (n != null) return n;
+                const nested = pickFromObj(v);
+                if (nested != null) return nested;
+            }
+            if (v && typeof v === 'object') stack.push(v);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Fetch one personal stat from Torn v2.
+ * Example:
+ *   GET /v2/user/:id/personalstats?stat=xantaken&key=...
+ *   GET /v2/user/:id/personalstats?stat=xantaken&timestamp=...&key=...
+ *
+ * @param {number|string} id
+ * @param {string} statName
+ * @param {string} apiKey
+ * @param {{ value: number }} [counter]
+ * @param {number} [timestamp]
+ * @returns {Promise<{ value: number|null, raw: object }>}
+ */
+async function fetchUserPersonalStatV2(id, statName, apiKey, counter, timestamp = undefined) {
+    if (counter) counter.value++;
+    const url = new URL(`${API_BASE}/v2/user/${id}/personalstats`);
+    url.searchParams.set('stat', statName);
+    url.searchParams.set('key', apiKey);
+    if (timestamp != null) {
+        url.searchParams.set('timestamp', String(timestamp));
+    }
+    const res = await fetch(url.toString());
+    const data = await res.json();
+    return {
+        value: extractV2PersonalStatValue(data, statName),
+        raw: data,
+    };
+}
+
 module.exports = {
     fetchUser,
     fetchFactionName,
     fetchCompanyName,
+    fetchUserPersonalStatV2,
 };

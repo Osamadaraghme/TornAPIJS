@@ -5,11 +5,14 @@
 ### Post-release updates
 
 - Added **ageDays**, **ageMonths**, and **ageYears** to both APIs (`random-active-ranked-player` and `active-ranked-player-by-id`).
-- Added **allTimeXanaxTaken** to both APIs (lifetime `xantaken` from Torn `personalstats`).
+- Replaced duplicated xanax totals with canonical fields: **totalXanaxAllTime**, **totalXanaxLastMonth**, and **avgLastMonth**.
+- Added Torn **v2 personalstats** integration for accurate month/all-time xanax totals in responses.
+- Updated last-month average formula to: `(totalXanaxAllTime - totalXanaxLastMonth) / 30.4375`.
 - Added **xanaxMode** response field and unified env switch `TORN_XANAX_MODE=fast|probe`.
 - Set **fast mode as default** for lower API usage and recruitment readiness.
 - Optimized by-id call behavior in fast mode (minimal calls); kept probe mode for deeper xanax diagnostics when needed.
-- Updated CLI headers and README docs to reflect the new fields, mode switch, and API-call expectations.
+- Added CSV writer API/CLI (`active-ranked-player-by-id-csv`) that creates file+header when missing and appends rows when present.
+- Updated CLI headers and README docs to reflect the new fields, mode switch, CSV flow, and API-call expectations.
 
 ---
 
