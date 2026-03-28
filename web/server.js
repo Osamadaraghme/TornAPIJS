@@ -8,6 +8,7 @@ const fs = require('fs');
 const fsp = require('fs').promises;
 const express = require('express');
 const { marked } = require('marked');
+const GithubSlugger = require('github-slugger').default;
 const {
     exportRandomActivePlayerToSql,
     exportPlayerByIdToSql,
@@ -109,10 +110,32 @@ function escapeHtml(s) {
         .replace(/"/g, '&quot;');
 }
 
+/**
+ * `marked` does not emit heading `id`s; GitHub README links use github-slugger rules.
+ * Inject matching ids so `#fragment` links work on `/readme` and `/release-notes`.
+ */
+function addGithubHeadingIds(html) {
+    const slugger = new GithubSlugger();
+    return html.replace(/<h([1-6])(\s[^>]*)?>([\s\S]*?)<\/h\1>/gi, (full, level, attrs, inner) => {
+        if (attrs && /\sid\s*=/.test(attrs)) return full;
+        const textOnly = inner
+            .replace(/<[^>]+>/g, '')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .trim();
+        if (!textOnly) return full;
+        const id = slugger.slug(textOnly);
+        return `<h${level} id="${escapeHtml(id)}">${inner}</h${level}>`;
+    });
+}
+
 async function sendMarkdownPage(res, relPath, pageTitle, activeNav) {
     const full = path.join(ROOT, relPath);
     const md = await fsp.readFile(full, 'utf8');
-    const html = marked.parse(md);
+    const html = addGithubHeadingIds(marked.parse(md));
     const inner = `<article class="md-doc">${html}</article>`;
     res.type('html').send(layout(pageTitle, activeNav, inner, 'page-md-doc'));
 }

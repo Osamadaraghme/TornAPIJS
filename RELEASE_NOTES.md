@@ -1,5 +1,7 @@
 # Release notes
 
+**Torn references:** [API documentation](https://staticfiles.torn.com/api.html) · [API v2 (Swagger)](https://www.torn.com/swagger.php) · [API keys (in-game)](https://www.torn.com/preferences.php#tab=api)
+
 ## v2.3.0
 
 **Release date:** March 2026
@@ -7,11 +9,13 @@
 ### Highlights
 
 - **Export schema:** `factionId` and `companyId` added to `CSV_HEADERS` / `buildPlayerStatsCsvRow` (`src/models/player-stats-csv-model.js`); populated from profile in `active-ranked-player-by-id` and `random-active-ranked-player` (still used by Faction HoF export).
-- **Web export viewer:** Faction and company **names** link to Torn (`factions.php?step=profile&ID=…`, `companies.php?ID=…`) when IDs are present; ID columns are stored in SQL but omitted from the transposed field list (`web/server.js`).
+- **Web export viewer:** Faction and company **names** link to Torn ([faction profile](https://www.torn.com/factions.php?step=profile&ID=1), [company](https://www.torn.com/companies.php?ID=1)) when IDs are present; ID columns are stored in SQL but omitted from the transposed field list (`web/server.js`).
 - **Web UX:** Header **Quick go** search (`web/public/site.js`) — **Ctrl+K** / **Cmd+K** or **`/`** to focus; filter Home / APIs / exports / docs; all-digit query jumps to **Player by ID** with that ID pre-filled. **`/api/by-id?playerId=`** or **`?q=`** pre-fills the form.
 - **API result pages:** Prominent **Search again** button (Random, By ID, Faction HoF — success and error).
 - **Layout:** Header uses `site-header` / `nav-links` + quick jump; styles in `web/public/style.css`.
 - **README:** Reorganized for readability (Web UI and API keys first; contributor instructions for adding keys in `src/static-api-keys.js`).
+- **Markdown pages:** `/readme` and `/release-notes` inject **GitHub-compatible** `id` attributes on headings (`github-slugger`) so in-page `#fragment` links work in the browser, not only on github.com.
+- **Docs links:** README and this file link to [Torn API docs](https://staticfiles.torn.com/api.html), [Swagger](https://www.torn.com/swagger.php), in-game [API keys](https://www.torn.com/preferences.php#tab=api), and local web UI routes (`http://localhost:3847/...`).
 
 ### Notes
 
@@ -19,7 +23,7 @@
 
 ### Dependencies
 
-- Unchanged (**express**, **marked**).
+- **express**, **marked**, **github-slugger** (heading anchors on `/readme` and `/release-notes`).
 
 ---
 
@@ -29,7 +33,7 @@
 
 ### Highlights
 
-- **Torn v2 personalstats (batched):** Per player, two calls — `stat=xantaken,timeplayed,activestreak` (current) and `stat=xantaken,timeplayed` with a **one month ago** timestamp — implemented in `src/utils/monthly-v2-recruitment-stats.js` and `fetchUserPersonalStatsV2` (`src/api/torn-client.js`).
+- **Torn v2 personalstats (batched):** Per player, two calls — `stat=xantaken,timeplayed,activestreak` (current) and `stat=xantaken,timeplayed` with a **one month ago** timestamp — implemented in `src/utils/monthly-v2-recruitment-stats.js` and `fetchUserPersonalStatsV2` (`src/api/torn-client.js`). See [API v2 Swagger](https://www.torn.com/swagger.php) (`/v2/user/{userId}/personalstats`).
 - **New export / response fields:** `timePlayed` (all-time seconds), `timePlayedUntilLastMonth`, `timePlayedDuringLastMonth`, `avgTimePlayedHoursPerDay`, `averageTimeScore` (0–100; **6 h/day** average over the window = 100%), `combinedScore` (0–100), `activeStreak` (informational; not used in tier).
 - **Tier = 75% xan + 25% time:** `combinedScore = 0.75 * xanScore + 0.25 * averageTimeScore` (each 0–100); S/A/B/C/D/F bands unchanged (`tierForFinalScore`). Random **TIER** filter uses this combined tier.
 - **Constants:** `HOURS_PER_DAY_FOR_FULL_TIME_SCORE`, `RECRUITMENT_TIER_XAN_WEIGHT`, `RECRUITMENT_TIER_TIME_WEIGHT` in `src/constants.js`; helpers in `src/utils/scoring.js`.
@@ -49,7 +53,7 @@
 
 - **Web export viewer:** Transposed table (recruiter field order; **Avg. Xanax / day** directly under **Xan score**), sticky field column and header row, consistent left alignment, HTML-entity–friendly display.
 - **Row delete:** Each record column has **Delete**; `POST` rewrites the `.sql` file via `writeSqlExportFile` (`src/utils/sql-append.js`), normalizing rows to current `CSV_HEADERS`.
-- **Torn links:** Player name, player ID, and `#id` header link to `profiles.php?XID=…` (new tab). Faction and company name links were added in **v2.3.0** (requires `factionId` / `companyId` in the export row).
+- **Torn links:** Player name, player ID, and `#id` header link to [profiles](https://www.torn.com/profiles.php?XID=1) (`profiles.php?XID=…`, new tab). Faction and company name links were added in **v2.3.0** (requires `factionId` / `companyId` in the export row).
 - **Export schema:** SQL `INSERT`s omit `sourceFactionId`, `sourceFactionName`, `statsAvailable`, and `periodIsWindowed` (see `src/models/player-stats-csv-model.js`). Append logic treats any file whose first line starts with `-- TornAPIJS:player_stats:` as our export so schema changes do not duplicate headers.
 - **In-browser docs:** Routes `/readme` and `/release-notes` render `README.md` and this file with **marked** (`package.json`).
 - **README:** “How scoring works” (xan score, tier, monthly delta), stopping the web server and freeing port **3847** (Ctrl+C, PowerShell `Stop-Process`, optional `TORN_WEB_PORT`).
@@ -95,7 +99,7 @@
 
 ### Web UI
 
-- Default URL `http://localhost:3847` (override with `TORN_WEB_PORT`). Requires `npm install` for the `express` dependency (`package.json`).
+- Default URL [`http://localhost:3847`](http://localhost:3847) (override with `TORN_WEB_PORT`). Requires `npm install` for dependencies in `package.json` (**express**, **marked**; later releases add **github-slugger**).
 
 ### Documentation
 

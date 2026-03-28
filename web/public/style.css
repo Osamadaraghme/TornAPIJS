@@ -460,6 +460,16 @@ body.page-md-doc main {
   color: var(--text);
 }
 
+/* Hash links scroll targets below the top of the viewport */
+.md-doc h1,
+.md-doc h2,
+.md-doc h3,
+.md-doc h4,
+.md-doc h5,
+.md-doc h6 {
+  scroll-margin-top: 1.25rem;
+}
+
 .md-doc h1 {
   font-size: 1.65rem;
   margin-top: 0;

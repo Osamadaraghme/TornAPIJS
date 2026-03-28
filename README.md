@@ -2,15 +2,26 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
-**Version:** **2.3.0** (`package.json`, `RELEASE_NOTES.md`).
+**Version:** **2.3.0** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)).
 
 Exports append `INSERT` rows to `.sql` files under `exports/` (created if missing). New files list every column in model order (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
+
+**In-page links** (`#section-id`): slugs follow the same rules as **GitHub** (via `github-slugger` in `web/server.js`), so fragments work on **github.com** and in the local **`/readme`** and **`/release-notes`** pages.
+
+### Official Torn links
+
+- [Torn API documentation](https://staticfiles.torn.com/api.html) — selections, error codes, rate limits  
+- [API v2 (Swagger)](https://www.torn.com/swagger.php) — e.g. `GET /v2/user/{userId}/personalstats`  
+- [API keys (in-game)](https://www.torn.com/preferences.php#tab=api) — create or manage keys under Torn **Preferences → API**  
+- [Torn City](https://www.torn.com/) — main game site  
+
+HTTP requests from this project use **`https://api.torn.com`** (see `API_BASE` in `src/constants.js`).
 
 ---
 
 ## Web UI
 
-The browser UI uses the same controllers as the CLI. **Default URL:** `http://localhost:3847` (override with env **`TORN_WEB_PORT`**).
+The browser UI uses the same controllers as the CLI. **Default URL:** [`http://localhost:3847`](http://localhost:3847) (override with env **`TORN_WEB_PORT`**). With the server running, append any path below (e.g. [`http://localhost:3847/api/by-id`](http://localhost:3847/api/by-id)).
 
 ### Setup and run
 
@@ -40,21 +51,21 @@ node web/server.js
 
 ### Environment
 
-Set **`TORN_API_KEY`** if you are not using the default key pool (see [API keys](#api-keys)).
+Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`). To use a single key without editing that file, set **`TORN_API_KEY`**.
 
 ### Pages
 
 | Path | Purpose |
 |------|---------|
-| `/` | Home, shortcuts, list of `.sql` files in `exports/` |
-| `/api/random` | Random active ranked → append one row |
-| `/api/by-id` | Player by ID (`?playerId=` or `?q=` pre-fills the ID) |
-| `/api/faction-hof` | Faction Hall of Fame rank → append rows |
-| `/exports` | Index of all `exports/*.sql` |
-| `/exports/view/<file>.sql` | Table or raw SQL (time played shown as days/hours; DB still stores seconds) |
-| `/readme` | This file (rendered) |
-| `/release-notes` | Changelog |
-| `/about` | Author note |
+| [`/`](http://localhost:3847/) | Home, shortcuts, list of `.sql` files in `exports/` |
+| [`/api/random`](http://localhost:3847/api/random) | Random active ranked → append one row |
+| [`/api/by-id`](http://localhost:3847/api/by-id) | Player by ID (`?playerId=` or `?q=` pre-fills the ID) |
+| [`/api/faction-hof`](http://localhost:3847/api/faction-hof) | Faction Hall of Fame rank → append rows |
+| [`/exports`](http://localhost:3847/exports) | Index of all `exports/*.sql` |
+| `/exports/view/<file>.sql` | Table or raw SQL (e.g. [`/exports/view/active-ranked-player-by-id-stats.sql`](http://localhost:3847/exports/view/active-ranked-player-by-id-stats.sql); time played shown as days/hours; DB still stores seconds) |
+| [`/readme`](http://localhost:3847/readme) | This file (rendered) |
+| [`/release-notes`](http://localhost:3847/release-notes) | Changelog |
+| [`/about`](http://localhost:3847/about) | Author note |
 
 ### Navigation shortcuts
 
@@ -64,8 +75,8 @@ Set **`TORN_API_KEY`** if you are not using the default key pool (see [API keys]
 
 ### Export table (viewer)
 
-- **Player name**, **player ID**, and column headers link to Torn profiles (`profiles.php?XID=…`).
-- **Faction** and **company** names link when the row has **`factionId`** and **`companyId`** (new exports from v2.3.0). Older `.sql` files without those columns show plain text until you append new rows or normalize the file (e.g. row delete in the viewer fills missing columns with `NULL`).
+- **Player name**, **player ID**, and column headers link to Torn profiles — pattern [`https://www.torn.com/profiles.php?XID={id}`](https://www.torn.com/profiles.php?XID=1).
+- **Faction** and **company** names link when the row has **`factionId`** and **`companyId`** (new exports from v2.3.0): [`factions.php?step=profile&ID=…`](https://www.torn.com/factions.php?step=profile&ID=1), [`companies.php?ID=…`](https://www.torn.com/companies.php?ID=1). Older `.sql` files without those columns show plain text until you append new rows or normalize the file (e.g. row delete in the viewer fills missing columns with `NULL`).
 
 ### Project layout (web)
 
@@ -85,7 +96,7 @@ Resolution order (see `resolveApiKeys` in `src/api/torn-client.js`):
 2. Environment variable **`TORN_API_KEY`** (single key).
 3. The static pool in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS` array).
 
-If Torn returns rate-limit **code 5**, the client tries the **next** key in the resolved list.
+If Torn returns rate-limit [**code 5**](https://staticfiles.torn.com/api.html) (“too many requests”), the client tries the **next** key in the resolved list.
 
 ### Adding a key to the shared pool (for contributors)
 
@@ -104,9 +115,29 @@ const TORN_PUBLIC_API_KEYS = [
 ```
 
 3. Save the file. Duplicates are ignored at runtime (`uniqueKeys` in `torn-client.js`).
-4. **Do not** commit keys you are not allowed to share. Prefer a **pull request** so maintainers can review; revoke the key if it is ever exposed unintentionally.
+4. **Do not** commit keys you are not allowed to share. Prefer a **pull request** so maintainers can review; revoke the key in [Torn API preferences](https://www.torn.com/preferences.php#tab=api) if it is ever exposed unintentionally.
 
 For **local-only** use without editing the repo, set **`TORN_API_KEY`** instead.
+
+---
+
+## Constants (`src/constants.js`)
+
+Tunable values live in **`src/constants.js`**. Edit that file, save, and restart the web server or run the CLI again. Anything that `require`s this module picks up the new values.
+
+| Constant | Role |
+|----------|------|
+| **`AVG_DAYS_PER_MONTH`** | Divisor when turning monthly xanax / time deltas into per-day averages (default **30.4375**). |
+| **`XANAX_PER_DAY_FOR_FULL_SCORE`** | Lifetime or monthly-derived **avg Xanax/day** that maps to a **100** xan score (default **3**). Lower = easier to max the xan component. |
+| **`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** | **Avg hours played/day** (from the last-month time window) that maps to **100** on the time component (default **6**). |
+| **`RECRUITMENT_TIER_XAN_WEIGHT`** / **`RECRUITMENT_TIER_TIME_WEIGHT`** | Weights for **combined** tier score (default **0.75** / **0.25**). They should **sum to 1**. |
+| **`DEFAULT_*_STATS_SQL_PATH`** | Default `.sql` output paths for each API (unless overridden by CLI, options, or env). |
+| **`API_BASE`** | Torn API host (normally leave as [`https://api.torn.com`](https://api.torn.com)). |
+| **`TORN_ERROR_MESSAGES`** / **`TORN_FATAL_ERROR_CODES`** | Error text and which Torn codes stop retries (`src/api/torn-client.js`); codes are documented under [Torn API errors](https://staticfiles.torn.com/api.html). |
+
+**Tier letter cutoffs** (e.g. S ≥ 90, A ≥ 80) are **not** in `constants.js`; they are in **`src/utils/scoring.js`** (`tierForFinalScore` and related helpers). Change those if you want different S/A/B/C/D/F boundaries.
+
+Scoring math that uses the constants above is implemented in **`src/utils/scoring.js`**.
 
 ---
 
@@ -216,7 +247,7 @@ Implemented in `src/utils/scoring.js`; constants in `src/constants.js`.
 
 ### Average Xanax per day
 
-- **Monthly window:** Torn **v2** cumulative **`xantaken`**: last-month intake = `xanaxTakenDuringLastMonth` (all-time minus value at “one month ago”). Divided by **`AVG_DAYS_PER_MONTH` (30.4375)** → **`avgXanaxPerDay`**.
+- **Monthly window:** Torn [**v2** `personalstats`](https://www.torn.com/swagger.php) cumulative **`xantaken`**: last-month intake = `xanaxTakenDuringLastMonth` (all-time minus value at “one month ago”). Divided by **`AVG_DAYS_PER_MONTH` (30.4375)** → **`avgXanaxPerDay`**.
 - **Fallback:** Lifetime `xantaken` / account age in days.
 
 ### Xan score (0–100)
@@ -250,8 +281,8 @@ Tier bands use **`combinedScore`** (same table as in [Random active ranked](#cli
 
 ### Other (v2.2.0)
 
-- **`activestreak`** from the same v2 personalstats batch (not used in tier).
-- Two v2 **`/v2/user/:id/personalstats`** calls per player (all-time batch + month-ago batch).
+- **`activestreak`** from the same [v2 `personalstats`](https://www.torn.com/swagger.php) batch (not used in tier).
+- Two v2 **`GET /v2/user/{userId}/personalstats`** calls per player (all-time batch + month-ago batch); see [Swagger](https://www.torn.com/swagger.php) for parameters (`stat`, `timestamp`, etc.).
 
 ---
 
@@ -271,5 +302,6 @@ Tier bands use **`combinedScore`** (same table as in [Random active ranked](#cli
 - `src/services/` — Torn orchestration and scoring pipeline.
 - `src/api/` — HTTP client and key failover (`torn-client.js`).
 - `src/utils/` — Extractors, scoring helpers, errors, SQL append.
+- `src/constants.js` — Tunable scoring, default paths, API/error metadata (see [Constants](#constants-srcconstantsjs)).
 - `src/static-api-keys.js` — Default API key pool.
 - `src/index.js` — Public exports (`player-stats-csv-controller.js`).
