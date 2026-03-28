@@ -1,5 +1,23 @@
 # Release notes
 
+## v2.2.0
+
+**Release date:** 2026
+
+### Highlights
+
+- **Torn v2 personalstats (batched):** Per player, two calls — `stat=xantaken,timeplayed,activestreak` (current) and `stat=xantaken,timeplayed` with a **one month ago** timestamp — implemented in `src/utils/monthly-v2-recruitment-stats.js` and `fetchUserPersonalStatsV2` (`src/api/torn-client.js`).
+- **New export / response fields:** `timePlayed` (all-time seconds), `timePlayedUntilLastMonth`, `timePlayedDuringLastMonth`, `avgTimePlayedHoursPerDay`, `averageTimeScore` (0–100; **6 h/day** average over the window = 100%), `combinedScore` (0–100), `activeStreak` (informational; not used in tier).
+- **Tier = 75% xan + 25% time:** `combinedScore = 0.75 * xanScore + 0.25 * averageTimeScore` (each 0–100); S/A/B/C/D/F bands unchanged (`tierForFinalScore`). Random **TIER** filter uses this combined tier.
+- **Constants:** `HOURS_PER_DAY_FOR_FULL_TIME_SCORE`, `RECRUITMENT_TIER_XAN_WEIGHT`, `RECRUITMENT_TIER_TIME_WEIGHT` in `src/constants.js`; helpers in `src/utils/scoring.js`.
+- **Web table:** Recruiter column order updated for combined / time scores (`web/server.js`).
+
+### Dependencies
+
+- Unchanged (**express**, **marked**).
+
+---
+
 ## v2.1.0
 
 **Release date:** 2026

@@ -485,3 +485,23 @@ body.page-md-doc main {
 .md-doc strong {
   color: #f0f4f8;
 }
+
+/* Export viewer: time played shown as days/hours (hover shows raw seconds) */
+.export-table .cell-duration {
+  cursor: help;
+  border-bottom: 1px dotted rgba(139, 156, 179, 0.4);
+}
+
+.about-page .about-lead {
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.about-page p {
+  line-height: 1.65;
+}
+
+.about-page .about-footer {
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+}

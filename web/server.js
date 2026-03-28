@@ -31,8 +31,11 @@ const RECRUITER_FIELD_ORDER = [
     'name',
     'playerId',
     'tier',
+    'combinedScore',
     'xanScore',
+    'averageTimeScore',
     'avgXanaxPerDay',
+    'avgTimePlayedHoursPerDay',
     'level',
     'hoursSinceLastAction',
     'factionName',
@@ -46,6 +49,10 @@ const RECRUITER_FIELD_ORDER = [
     'allTimeXanaxTaken',
     'xanaxTakenUntilLastMonth',
     'xanaxTakenDuringLastMonth',
+    'timePlayed',
+    'timePlayedUntilLastMonth',
+    'timePlayedDuringLastMonth',
+    'activeStreak',
     'periodUsed',
     'xanaxMode',
     'tornApiCallsUsed',
@@ -67,15 +74,29 @@ const FIELD_LABELS = {
     companyName: 'Company',
     hoursSinceLastAction: 'Hours since last action',
     xanScore: 'Xan score',
+    averageTimeScore: 'Avg. time score',
+    combinedScore: 'Combined score (75% xan / 25% time)',
     tier: 'Tier',
     avgXanaxPerDay: 'Avg. Xanax / day',
+    avgTimePlayedHoursPerDay: 'Avg. hours played / day (last month)',
     allTimeXanaxTaken: 'All-time Xanax taken',
     xanaxTakenUntilLastMonth: 'Xanax until last month',
     xanaxTakenDuringLastMonth: 'Xanax last month',
+    timePlayed: 'Time played (all-time)',
+    timePlayedUntilLastMonth: 'Time played until last month',
+    timePlayedDuringLastMonth: 'Time played (last month)',
+    activeStreak: 'Active streak',
     periodUsed: 'Period used',
-    xanaxMode: 'Xanax mode',
+    xanaxMode: 'Stats mode',
     tornApiCallsUsed: 'API calls used',
 };
+
+/** SQL columns stored as seconds; shown in the export viewer as days + hours. */
+const TIME_PLAYED_SECONDS_COLUMNS = new Set([
+    'timePlayed',
+    'timePlayedUntilLastMonth',
+    'timePlayedDuringLastMonth',
+]);
 
 function escapeHtml(s) {
     return String(s)
@@ -96,12 +117,13 @@ async function sendMarkdownPage(res, relPath, pageTitle, activeNav) {
 function nav(active) {
     const items = [
         ['/', 'Home', 'home'],
-        ['/readme', 'README', 'readme'],
-        ['/release-notes', 'Release notes', 'releases'],
         ['/api/random', 'Random ranked', 'random'],
         ['/api/by-id', 'Player by ID', 'byid'],
         ['/api/faction-hof', 'Faction HoF', 'hof'],
         ['/exports', 'SQL exports', 'exports'],
+        ['/readme', 'README', 'readme'],
+        ['/release-notes', 'Release notes', 'releases'],
+        ['/about', 'About', 'about'],
     ];
     const links = items
         .map(([href, label, id]) => {
@@ -161,6 +183,36 @@ function cellTdClass(value) {
     return 'td-str';
 }
 
+/** Human-readable duration from cumulative seconds (Torn `timeplayed`). */
+function formatSecondsAsDaysHoursHtml(rawSeconds) {
+    if (rawSeconds === null || rawSeconds === undefined) {
+        return '<span class="cell-null">NULL</span>';
+    }
+    const n = Number(rawSeconds);
+    if (!Number.isFinite(n) || n < 0) {
+        return '<span class="cell-str">—</span>';
+    }
+    const s = Math.floor(n);
+    const days = Math.floor(s / 86400);
+    const hours = Math.floor((s % 86400) / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const parts = [];
+    if (days > 0) parts.push(`${days} day${days === 1 ? '' : 's'}`);
+    if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+    if (minutes > 0 && parts.length < 2) {
+        parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+    }
+    if (parts.length === 0) {
+        if (s > 0) {
+            parts.push(`${s} second${s === 1 ? '' : 's'}`);
+        } else {
+            parts.push('0 hours');
+        }
+    }
+    const label = parts.join(', ');
+    return `<span class="cell-str cell-duration" title="${escapeHtml(String(s))} seconds total">${escapeHtml(label)}</span>`;
+}
+
 function formatTableCell(value) {
     if (value === null || value === undefined) {
         return '<span class="cell-null">NULL</span>';
@@ -177,6 +229,9 @@ function formatTableCell(value) {
 
 function formatTransposedDataCell(col, row) {
     const v = row[col];
+    if (TIME_PLAYED_SECONDS_COLUMNS.has(col)) {
+        return formatSecondsAsDaysHoursHtml(v);
+    }
     const inner = formatTableCell(v);
     let profileId = null;
     if (col === 'playerId') {
@@ -222,7 +277,8 @@ function renderPlayerStatsTable(parsed, sqlBasename) {
             const cells = rows
                 .map((row) => {
                     const v = row[col];
-                    return `<td class="${cellTdClass(v)}">${formatTransposedDataCell(col, row)}</td>`;
+                    const tdCls = TIME_PLAYED_SECONDS_COLUMNS.has(col) ? 'td-str' : cellTdClass(v);
+                    return `<td class="${tdCls}">${formatTransposedDataCell(col, row)}</td>`;
                 })
                 .join('');
             return `<tr>${fieldCell}${cells}</tr>`;
@@ -297,6 +353,19 @@ app.get('/release-notes', async (req, res) => {
     }
 });
 
+app.get('/about', (req, res) => {
+    const tornProfile = 'https://www.torn.com/profiles.php?XID=3961724';
+    const body = `
+<div class="card about-page">
+  <h1>About</h1>
+  <p class="about-lead">Hi — I’m <strong>Botato</strong> (<a href="${escapeHtml(tornProfile)}" target="_blank" rel="noopener noreferrer">Torn ID 3961724</a>). These days I’m a programmer who spends far too much time in <strong>Torn City</strong></p>
+  <p>This little site is a set of scripts I use for recruitment and stats: nothing fancy, just tools that talk to Torn’s API and land tidy SQL exports.</p>
+  <p>In-game I’m a <strong>merit whore</strong> in the best/worst sense: I’m chasing every award I can, and I’m trying to pop as much Xanax as I can while I’m at it. When I’m not up against API limits, I’m usually tweaking a formula or finding the best algorithm to git faster in torn in the long run, its a marathon, not a sprint.</p>
+  <p class="about-footer muted">Thanks for stopping by. Good luck in the city.</p>
+</div>`;
+    res.type('html').send(layout('About', 'about', body));
+});
+
 app.get('/', async (req, res) => {
     const files = await listSqlBasenames();
     const exportLinks = files.length
@@ -305,7 +374,7 @@ app.get('/', async (req, res) => {
     const body = `
 <h1>Home</h1>
 <div class="card">
-  <p>Documentation: <a href="/readme">README</a> · <a href="/release-notes">Release notes</a></p>
+  <p>Docs: <a href="/readme">README</a> · <a href="/release-notes">Release notes</a> · <a href="/about">About</a></p>
   <p>Run the three recruitment APIs from their pages. Export files appear under <code>exports/</code>.</p>
   <p><a class="btn" href="/api/random">Random active ranked</a>
   <a class="btn" href="/api/by-id">Player by ID</a>

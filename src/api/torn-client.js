@@ -281,6 +281,40 @@ async function fetchUserPersonalStatV2(id, statName, apiKey, counter, timestamp 
     };
 }
 
+/**
+ * Fetch multiple v2 personal stats in one call (comma-separated `stat` names).
+ * @param {number|string} id
+ * @param {string} statsCsv - e.g. `xantaken,timeplayed,activestreak`
+ * @param {string|string[]|undefined} apiKey
+ * @param {{ value: number }} [counter]
+ * @param {number} [timestamp] - optional historical snapshot (supported stats only)
+ * @returns {Promise<{ values: Record<string, number|null>, raw: object }>}
+ */
+async function fetchUserPersonalStatsV2(id, statsCsv, apiKey, counter, timestamp = undefined) {
+    const data = await requestWithApiKeyFailover((key) => {
+        const url = new URL(`${API_BASE}/v2/user/${id}/personalstats`);
+        url.searchParams.set('stat', statsCsv);
+        url.searchParams.set('key', key);
+        if (timestamp != null) url.searchParams.set('timestamp', String(timestamp));
+        return url;
+    }, apiKey, counter);
+
+    const keys = String(statsCsv)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const values = {};
+    for (const k of keys) {
+        const norm = k.toLowerCase();
+        const v =
+            extractV2PersonalStatValue(data, norm)
+            ?? extractV2PersonalStatValue(data, k);
+        values[norm] = v;
+    }
+
+    return { values, raw: data };
+}
+
 module.exports = {
     fetchUser,
     fetchTorn,
@@ -288,4 +322,5 @@ module.exports = {
     fetchFactionName,
     fetchCompanyName,
     fetchUserPersonalStatV2,
+    fetchUserPersonalStatsV2,
 };

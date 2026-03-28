@@ -12,6 +12,13 @@ const AVG_DAYS_PER_MONTH = 30.4375;
 /** Lifetime avg xanax per day that gives 100% score (softer = lower value). */
 const XANAX_PER_DAY_FOR_FULL_SCORE = 3;
 
+/** Avg hours played per day (from last-month time delta) that gives 100% on the time component. */
+const HOURS_PER_DAY_FOR_FULL_TIME_SCORE = 6;
+
+/** Tier uses combined score: (xan × XAN) + (time × TIME). Must sum to 1. */
+const RECRUITMENT_TIER_XAN_WEIGHT = 0.75;
+const RECRUITMENT_TIER_TIME_WEIGHT = 0.25;
+
 /** Static default SQL export paths per API (can be overridden per call). */
 const DEFAULT_RANDOM_STATS_SQL_PATH = './exports/random-active-ranked-player-stats.sql';
 const DEFAULT_BY_ID_STATS_SQL_PATH = './exports/active-ranked-player-by-id-stats.sql';
@@ -45,6 +52,9 @@ module.exports = {
     API_BASE,
     AVG_DAYS_PER_MONTH,
     XANAX_PER_DAY_FOR_FULL_SCORE,
+    HOURS_PER_DAY_FOR_FULL_TIME_SCORE,
+    RECRUITMENT_TIER_XAN_WEIGHT,
+    RECRUITMENT_TIER_TIME_WEIGHT,
     DEFAULT_RANDOM_STATS_SQL_PATH,
     DEFAULT_BY_ID_STATS_SQL_PATH,
     DEFAULT_FACTION_HOF_STATS_SQL_PATH,
