@@ -11,6 +11,7 @@
 - **Web UX:** Header **Quick go** search (`web/public/site.js`) — **Ctrl+K** / **Cmd+K** or **`/`** to focus; filter Home / APIs / exports / docs; all-digit query jumps to **Player by ID** with that ID pre-filled. **`/api/by-id?playerId=`** or **`?q=`** pre-fills the form.
 - **API result pages:** Prominent **Search again** button (Random, By ID, Faction HoF — success and error).
 - **Layout:** Header uses `site-header` / `nav-links` + quick jump; styles in `web/public/style.css`.
+- **README:** Reorganized for readability (Web UI and API keys first; contributor instructions for adding keys in `src/static-api-keys.js`).
 
 ### Notes
 

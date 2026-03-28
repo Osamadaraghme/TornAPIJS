@@ -2,135 +2,154 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
-**Current version:** **2.3.0** (see `package.json` and `RELEASE_NOTES.md`).
+**Version:** **2.3.0** (`package.json`, `RELEASE_NOTES.md`).
 
-All public APIs append `INSERT` rows to `.sql` files (create if missing, append if they exist). New files include comment lines that list every column name in the same order as the model (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
+Exports append `INSERT` rows to `.sql` files under `exports/` (created if missing). New files list every column in model order (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
-## Architecture (MVC + services)
-
-- `src/controllers/` - API controllers used by CLI and programmatic entry points
-- `src/models/` - Column definitions and row mapping for exports
-- `src/views/` - CLI output formatting
-- `src/services/` - business logic and Torn API orchestration
-- `src/api/` - low-level Torn HTTP client with key failover
-- `src/utils/` - extractors, scoring, errors, helpers, SQL append utility
-- `web/` - optional Express browser UI (`npm run web`)
-- `src/index.js` - public SQL export exports (`src/controllers/player-stats-csv-controller.js`)
-
-## API key behavior
-
-- Default key pool is in `src/static-api-keys.js`.
-- Current default key is `Bf0F4qebJLvo2Mj0`.
-- You can override with `TORN_API_KEY`.
-- If Torn returns rate-limit code `5`, the client tries the next key in the pool.
+---
 
 ## Web UI
 
-Install dependencies once:
+The browser UI uses the same controllers as the CLI. **Default URL:** `http://localhost:3847` (override with env **`TORN_WEB_PORT`**).
+
+### Setup and run
 
 ```powershell
 npm install
-```
-
-Start the server (default **http://localhost:3847**; override with env `TORN_WEB_PORT`):
-
-```powershell
 npm run web
 ```
 
-**Stop the server / close the previous connection**
+If PowerShell blocks scripts, use **`npm.cmd run web`** or **`node web\server.js`** from the project root.
 
-- In the **same terminal** where the web UI is running, press **Ctrl+C** to stop Node and release the listen port (default **3847**).
+### Stop the server / port in use
 
-If you start again and see **`EADDRINUSE: address already in use`**, a previous Node process is still bound to that port. On **PowerShell**, find its process ID and stop it:
+- In the terminal where the server runs, press **Ctrl+C**.
+- If you see **`EADDRINUSE`** on port **3847**:
 
 ```powershell
 Get-NetTCPConnection -LocalPort 3847 | Select-Object OwningProcess
 Stop-Process -Id <PID> -Force
 ```
 
-(Replace `<PID>` with the number from `OwningProcess`.) Alternatively, start on another port without stopping the old instance:
+Or use another port without stopping the old process:
 
 ```powershell
 $env:TORN_WEB_PORT = "3848"
 node web/server.js
 ```
 
-If `npm run web` is blocked by **execution policy** on PowerShell, use **`npm.cmd run web`** or **`node web\server.js`** from the project root.
+### Environment
 
-The UI uses the same export controllers as the CLI. Pages:
+Set **`TORN_API_KEY`** if you are not using the default key pool (see [API keys](#api-keys)).
+
+### Pages
 
 | Path | Purpose |
 |------|---------|
-| `/` | Home with shortcuts and a list of current `.sql` files in `exports/` |
-| `/api/random` | Random active ranked (form submits to append one `INSERT`) |
-| `/api/by-id` | Player by ID (optional query `?playerId=` or `?q=` pre-fills the ID field) |
-| `/api/faction-hof` | Faction HoF rank export |
-| `/exports` | Index of all `exports/*.sql` files (dynamic) |
-| `/exports/view/<file>.sql` | Read-only view of one export file (time played columns show days & hours; SQL still stores seconds) |
-| `/readme` | This documentation rendered from `README.md` |
-| `/release-notes` | Changelog rendered from `RELEASE_NOTES.md` |
-| `/about` | Short bio / credits for the author |
+| `/` | Home, shortcuts, list of `.sql` files in `exports/` |
+| `/api/random` | Random active ranked → append one row |
+| `/api/by-id` | Player by ID (`?playerId=` or `?q=` pre-fills the ID) |
+| `/api/faction-hof` | Faction Hall of Fame rank → append rows |
+| `/exports` | Index of all `exports/*.sql` |
+| `/exports/view/<file>.sql` | Table or raw SQL (time played shown as days/hours; DB still stores seconds) |
+| `/readme` | This file (rendered) |
+| `/release-notes` | Changelog |
+| `/about` | Author note |
 
-**Navigation**
+### Navigation shortcuts
 
-- **Quick go** (search box in the header): filter pages by name; **Ctrl+K** / **Cmd+K** or **`/`** (when not typing in a form field) focuses it. Type part of a page name or choose from the list; **Enter** opens the highlighted row.
-- **Numeric shortcut:** digits only (e.g. `3225726`) offers **Player by ID — …** and opens `/api/by-id?playerId=…` with that ID filled in.
-- **API results:** after Random / By ID / Faction HoF runs, **Search again** returns to the same form (above the JSON block).
+- **Quick go** (header): type to filter pages; **Ctrl+K** / **Cmd+K** or **`/`** (when not in a form field) focuses it; **Enter** opens the highlighted row.
+- **Digits only** (e.g. `3225726`): jump to **Player by ID** with that ID filled (`/api/by-id?playerId=…`).
+- **Search again** on API result pages returns to the same form (above the JSON).
 
-**Export table links**
+### Export table (viewer)
 
 - **Player name**, **player ID**, and column headers link to Torn profiles (`profiles.php?XID=…`).
-- **Faction** and **company** names link to Torn when the row includes **`factionId`** and **`companyId`** (written on new exports from v2.3.0). Older `.sql` files without those columns show plain text until you re-append rows or rewrite the file (e.g. after a row delete, the web UI normalizes to the current schema with `NULL` for missing IDs).
+- **Faction** and **company** names link when the row has **`factionId`** and **`companyId`** (new exports from v2.3.0). Older `.sql` files without those columns show plain text until you append new rows or normalize the file (e.g. row delete in the viewer fills missing columns with `NULL`).
 
-Set `TORN_API_KEY` in the environment if you are not using the default key pool.
+### Project layout (web)
 
-## Quick API list
+- `web/server.js` — Express app and HTML.
+- `web/public/style.css` — styles.
+- `web/public/site.js` — header quick-jump behavior.
 
-| API | What it does | CLI call |
-|---|---|---|
-| Random active ranked -> SQL | Finds one random active player by filters and appends one `INSERT` | `node run-active-ranked.js 24 1 3000000 120 month C ANY ANY 15` |
-| Player by ID -> SQL | Fetches one player, computes monthly xanax delta fields, and appends one `INSERT` | `node run-active-ranked-by-id-csv.js 3532802` |
-| Faction HoF rank -> SQL | Finds faction at HoF rank and appends one `INSERT` per member (up to cap) | `node run-faction-hof-rank-csv.js 1 20` |
+---
 
-Default `.sql` paths are under `./exports/` (see below). Optional `[SQL_PATH]` overrides are documented in each section. Some runner filenames still include `csv` for historical reasons only.
+## API keys
 
-All three return JSON output that includes export metadata (`path`, `created`) and player/faction data while writing to `.sql`.
+### How keys are chosen
 
-Programmatic entry points: `getRandomActiveRankedPlayerToSql`, `getActiveRankedPlayerByIdToSql`, `getFactionPlayersByHofRankToSql` (see `src/index.js`).
+Resolution order (see `resolveApiKeys` in `src/api/torn-client.js`):
 
-## Random active ranked API
+1. Key(s) passed into the API method (if supported).
+2. Environment variable **`TORN_API_KEY`** (single key).
+3. The static pool in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS` array).
 
-Run:
+If Torn returns rate-limit **code 5**, the client tries the **next** key in the resolved list.
+
+### Adding a key to the shared pool (for contributors)
+
+To let everyone benefit from more keys (higher shared rate limit headroom):
+
+1. Open **`src/static-api-keys.js`**.
+2. Add your **16-character** Torn public API key as a new string inside the **`TORN_PUBLIC_API_KEYS`** array.
+
+Example:
+
+```javascript
+const TORN_PUBLIC_API_KEYS = [
+    'Bf0F4qebJLvo2Mj0',
+    'Your16CharKeyHere',
+];
+```
+
+3. Save the file. Duplicates are ignored at runtime (`uniqueKeys` in `torn-client.js`).
+4. **Do not** commit keys you are not allowed to share. Prefer a **pull request** so maintainers can review; revoke the key if it is ever exposed unintentionally.
+
+For **local-only** use without editing the repo, set **`TORN_API_KEY`** instead.
+
+---
+
+## Quick API overview (CLI)
+
+| API | What it does | Example |
+|-----|----------------|---------|
+| Random active ranked | One random active player → one `INSERT` | `node run-active-ranked.js 24 1 3000000 120 month C ANY ANY` |
+| Player by ID | One player → one `INSERT` | `node run-active-ranked-by-id-csv.js 3532802` |
+| Faction HoF rank | One faction by HoF rank → one `INSERT` per member (optional cap) | `node run-faction-hof-rank-csv.js 1 20` |
+
+Runner names still contain `csv` for history only; output is **SQL**.
+
+Programmatic exports: `getRandomActiveRankedPlayerToSql`, `getActiveRankedPlayerByIdToSql`, `getFactionPlayersByHofRankToSql` (`src/index.js`).
+
+---
+
+## CLI: Random active ranked
 
 ```powershell
 node run-active-ranked.js
 ```
 
-Arguments (positional — earlier slots must be filled to reach later ones):
+Positional arguments (fill earlier slots to use later ones):
 
 ```text
 ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL] [SQL_PATH]
 ```
 
-The 6th token (`PERIOD`) is only there to keep argument positions aligned with older CLIs; **the random ranked service always uses the monthly v2 window** for xanax and time played (`v2-recruitment-stats` in exports) and does not read `day` vs `month`. Pass `month` in examples.
+The 6th token (`PERIOD`) keeps CLI compatibility only; the service **always** uses the **monthly v2** window for xanax and time (`v2-recruitment-stats` in exports). Use `month` in examples.
 
-Tier behavior (`TIER` is case-insensitive):
-- `S` -> S only
-- `A` -> A or S
-- `B` -> B, A, or S
-- `C` -> C, B, A, or S
-- `D` -> D, C, B, A, or S
-- `F` -> any tier
-- `ALL` -> ignore tier filter
+**Tier filter** (`TIER`, case-insensitive): `S` → S only; `A` → A or S; `B` → B+; `C` → C+; `D` → D+; `F` → any; `ALL` → no tier filter.
 
-Tier score ranges (from **`combinedScore`**, 75% xan / 25% time — see [How scoring works](#how-scoring-works-xan-score-and-tier)):
-- `S`: `>= 90`
-- `A`: `>= 80` and `< 90`
-- `B`: `>= 70` and `< 80`
-- `C`: `>= 60` and `< 70`
-- `D`: `>= 50` and `< 60`
-- `F`: `< 50`
+**Score bands** (from **`combinedScore`**, 75% xan / 25% time — [How scoring works](#how-scoring-works-xan-score-and-tier)):
+
+| Band | `combinedScore` |
+|------|-----------------|
+| S | ≥ 90 |
+| A | ≥ 80 and &lt; 90 |
+| B | ≥ 70 and &lt; 80 |
+| C | ≥ 60 and &lt; 70 |
+| D | ≥ 50 and &lt; 60 |
+| F | &lt; 50 |
 
 Examples (default `./exports/random-active-ranked-player-stats.sql`):
 
@@ -139,31 +158,29 @@ node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
 node run-active-ranked.js 24 1 3000000 120 month C N ANY 15
 ```
 
-Optional: append `[SQL_PATH]` as the 12th argument to write elsewhere.
+Optional 12th argument: `[SQL_PATH]`.
 
-## Player by ID API
+---
 
-Run:
+## CLI: Player by ID
 
 ```powershell
 node run-active-ranked-by-id-csv.js PLAYER_ID [SQL_PATH]
 ```
 
-Examples (default `./exports/active-ranked-player-by-id-stats.sql`):
+Example (default `./exports/active-ranked-player-by-id-stats.sql`):
 
 ```powershell
 node run-active-ranked-by-id-csv.js 3532802
 ```
 
-Optional: `node run-active-ranked-by-id-csv.js PLAYER_ID [SQL_PATH]`
+---
 
-## Faction HoF rank API
-
-Run:
+## CLI: Faction HoF rank
 
 ```powershell
 node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]
-# short form using default .sql path:
+# Short form (default .sql path):
 node run-faction-hof-rank-csv.js HOF_RANK MAX_PLAYERS
 ```
 
@@ -174,84 +191,85 @@ node run-faction-hof-rank-csv.js 1
 node run-faction-hof-rank-csv.js 1 20
 ```
 
-Optional: `node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]` when you need a custom file.
+---
 
 ## SQL file format and defaults
 
-- Each API has its own default `.sql` file under `./exports/`:
-  - random API: `./exports/random-active-ranked-player-stats.sql`
-  - by-id API: `./exports/active-ranked-player-by-id-stats.sql`
-  - faction HoF API: `./exports/faction-hof-rank-player-stats.sql`
-- New files start with a sentinel line and comments listing all column headers, then multi-line `INSERT INTO "player_stats" (...)` / `VALUES (...)` blocks (one row per statement). String fields are HTML-entity decoded before quoting (e.g. `&#039;` becomes a normal apostrophe). Table name is `player_stats` (see `src/utils/sql-append.js`).
-- Player rows include **`factionId`** and **`companyId`** (alongside **`factionName`** / **`companyName`**) so the web viewer can link to Torn’s faction and company pages. Those two ID columns are hidden in the transposed table to keep the recruiter view tidy.
-- Override path per call with CLI `[SQL_PATH]`, or `options.sqlPath` / `options.csvPath` (legacy alias) in code.
-- Env overrides per API: `TORN_RANDOM_STATS_SQL`, `TORN_BY_ID_STATS_SQL`, `TORN_FACTION_HOF_STATS_SQL`. Legacy `*_CSV` and `TORN_STATS_CSV` env names are still read as fallbacks.
+| API | Default file |
+|-----|----------------|
+| Random | `./exports/random-active-ranked-player-stats.sql` |
+| By ID | `./exports/active-ranked-player-by-id-stats.sql` |
+| Faction HoF | `./exports/faction-hof-rank-player-stats.sql` |
+
+- New files: sentinel line, header comments with column names, then multi-line `INSERT INTO "player_stats" (...)` / `VALUES (...)`. Strings are HTML-entity decoded before quoting (`src/utils/sql-append.js`).
+- Rows include **`factionId`** / **`companyId`** (with names) for web links; those ID columns are omitted from the transposed viewer table.
+- Override path: CLI `[SQL_PATH]`, or `options.sqlPath` / `options.csvPath` (legacy) in code.
+- Env per API: `TORN_RANDOM_STATS_SQL`, `TORN_BY_ID_STATS_SQL`, `TORN_FACTION_HOF_STATS_SQL` (legacy `*_CSV` / `TORN_STATS_CSV` still accepted).
 - Global fallback: `TORN_STATS_SQL` or `TORN_STATS_CSV`.
-- Optional member cap for HoF export: `TORN_FACTION_MEMBER_LIMIT`
+- HoF member cap: `TORN_FACTION_MEMBER_LIMIT`.
+
+---
 
 ## How scoring works (Xan score and tier)
 
-Scoring is implemented in `src/utils/scoring.js` and uses constants from `src/constants.js`.
+Implemented in `src/utils/scoring.js`; constants in `src/constants.js`.
 
 ### Average Xanax per day
 
-- **Monthly window (current exports):** The services use Torn **v2** cumulative `xantaken` snapshots. The intake over the last month is `xanaxTakenDuringLastMonth` (all-time total minus the total at a “one month ago” timestamp). The scorer treats that as **monthly intake** and converts it to an average **per day** by dividing by **`AVG_DAYS_PER_MONTH` (30.4375)**. That value is what backs **`avgXanaxPerDay`** in exports when the monthly delta is available.
-- **Fallback:** If a period-specific total is not available, `computeScores` falls back to **lifetime** average: `xantaken` (all-time) divided by **account age in days**.
+- **Monthly window:** Torn **v2** cumulative **`xantaken`**: last-month intake = `xanaxTakenDuringLastMonth` (all-time minus value at “one month ago”). Divided by **`AVG_DAYS_PER_MONTH` (30.4375)** → **`avgXanaxPerDay`**.
+- **Fallback:** Lifetime `xantaken` / account age in days.
 
 ### Xan score (0–100)
-
-The internal formula uses a 0–1 ratio, then services multiply by 100 for display:
 
 ```text
 xanScore = min(avgXanaxPerDay / XANAX_PER_DAY_FOR_FULL_SCORE, 1) * 100
 ```
 
-- **`XANAX_PER_DAY_FOR_FULL_SCORE`** is **3**: an average of **3 Xanax per day** maps to a **100** score; higher usage still **caps at 100**.
+**`XANAX_PER_DAY_FOR_FULL_SCORE`** = **3** (3/day → 100, capped).
 
 ### Average time played (0–100)
 
-From **v2.2.0**, exports use Torn **v2** cumulative **`timeplayed`** (seconds) the same way as xanax: all-time minus the value at a **one month ago** timestamp gives seconds played in the last month. That delta is turned into **average seconds per day** using **`AVG_DAYS_PER_MONTH`**, then into **average hours per day** (`avgTimePlayedHoursPerDay`).
+Same monthly snapshot pattern for **`timeplayed`** (seconds) → **`avgTimePlayedHoursPerDay`**.
 
 ```text
 averageTimeScore = min(avgHoursPerDay / HOURS_PER_DAY_FOR_FULL_TIME_SCORE, 1) * 100
 ```
 
-- **`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** is **6**: an average of **6 hours played per day** over that window maps to a **100** time score; more time still **caps at 100**.
+**`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** = **6** (6 h/day average over the window → 100, capped).
 
-### Combined score and tier (S / A / B / C / D / F)
-
-**Tier** is **not** based on xanax alone anymore. The app builds a **combined 0–1** score, then converts it to 0–100 for banding:
+### Combined score and tier
 
 ```text
 combined01 = 0.75 * (xanScore as 0–1) + 0.25 * (averageTimeScore as 0–1)
 combinedScore = combined01 * 100
 ```
 
-Constants **`RECRUITMENT_TIER_XAN_WEIGHT`** (0.75) and **`RECRUITMENT_TIER_TIME_WEIGHT`** (0.25) live in `src/constants.js`. Exports include **`xanScore`**, **`averageTimeScore`**, and **`combinedScore`** (all 0–100) so recruiters can see both components.
+Weights: **`RECRUITMENT_TIER_XAN_WEIGHT`**, **`RECRUITMENT_TIER_TIME_WEIGHT`** in `src/constants.js`.
 
-Tiers (`tierForFinalScore`) use **`combinedScore`**:
+Tier bands use **`combinedScore`** (same table as in [Random active ranked](#cli-random-active-ranked)).
 
-| Tier | Score range |
-|------|-------------|
-| **S** | ≥ 90 |
-| **A** | ≥ 80 and &lt; 90 |
-| **B** | ≥ 70 and &lt; 80 |
-| **C** | ≥ 60 and &lt; 70 |
-| **D** | ≥ 50 and &lt; 60 |
-| **F** | &lt; 50 |
+### Other (v2.2.0)
 
-The **random ranked** runner’s `TIER` filter (“this tier or higher”) uses this **combined** tier; see the tier table under [Random active ranked API](#random-active-ranked-api).
+- **`activestreak`** from the same v2 personalstats batch (not used in tier).
+- Two v2 **`/v2/user/:id/personalstats`** calls per player (all-time batch + month-ago batch).
 
-### Other stats (v2.2.0)
+---
 
-- **`activestreak`** comes from the same v2 personalstats batch as current `xantaken` / `timeplayed` (current streak only; not used in tier).
-- API calls: two v2 **`/v2/user/:id/personalstats`** requests per player (all-time `xantaken,timeplayed,activestreak`, then `xantaken,timeplayed` at the month-ago timestamp).
+## Notes on xanax and timeplayed windows
 
-## Notes on xanax and timeplayed window accuracy
+- **Xanax:** `xanaxTakenDuringLastMonth = allTimeXanaxTaken - xanaxTakenUntilLastMonth`.
+- **Time played:** same idea for **`timeplayed`** seconds → `timePlayedDuringLastMonth`, plus all-time / until-last-month columns.
+- Exports include xanax fields, time fields, **`averageTimeScore`**, **`combinedScore`**, **`activeStreak`**, **`avgXanaxPerDay`**.
 
-- **Xanax** month fields use Torn v2 cumulative snapshots:
-  - all-time `xantaken`
-  - `xantaken` at last-month timestamp
-  - `xanaxTakenDuringLastMonth = allTimeXanaxTaken - xanaxTakenUntilLastMonth`
-- **Time played** uses the same pattern for **`timeplayed`** (seconds): `timePlayedDuringLastMonth`, plus all-time and “until last month” columns in exports.
-- Output fields (all three SQL export APIs) include xanax columns above, **time** columns (`timePlayed`, `timePlayedUntilLastMonth`, `timePlayedDuringLastMonth`, `avgTimePlayedHoursPerDay`), **scores** (`averageTimeScore`, `combinedScore`), **`activeStreak`**, and **`avgXanaxPerDay`** (from last-month xanax delta / average days per month).
+---
+
+## Architecture (MVC + services)
+
+- `src/controllers/` — Controllers for CLI and programmatic use.
+- `src/models/` — Export columns and row mapping.
+- `src/views/` — CLI formatting.
+- `src/services/` — Torn orchestration and scoring pipeline.
+- `src/api/` — HTTP client and key failover (`torn-client.js`).
+- `src/utils/` — Extractors, scoring helpers, errors, SQL append.
+- `src/static-api-keys.js` — Default API key pool.
+- `src/index.js` — Public exports (`player-stats-csv-controller.js`).
