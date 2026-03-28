@@ -1,60 +1,72 @@
 # Release notes
 
+## v2.1.0
+
+**Release date:** 2026
+
+### Highlights
+
+- **Web export viewer:** Transposed table (recruiter field order; **Avg. Xanax / day** directly under **Xan score**), sticky field column and header row, consistent left alignment, HTML-entity–friendly display.
+- **Row delete:** Each record column has **Delete**; `POST` rewrites the `.sql` file via `writeSqlExportFile` (`src/utils/sql-append.js`), normalizing rows to current `CSV_HEADERS`.
+- **Torn links:** Player name, player ID, and `#id` header link to `profiles.php?XID=…` (new tab).
+- **Export schema:** SQL `INSERT`s omit `sourceFactionId`, `sourceFactionName`, `statsAvailable`, and `periodIsWindowed` (see `src/models/player-stats-csv-model.js`). Append logic treats any file whose first line starts with `-- TornAPIJS:player_stats:` as our export so schema changes do not duplicate headers.
+- **In-browser docs:** Routes `/readme` and `/release-notes` render `README.md` and this file with **marked** (`package.json`).
+- **README:** “How scoring works” (xan score, tier, monthly delta), stopping the web server and freeing port **3847** (Ctrl+C, PowerShell `Stop-Process`, optional `TORN_WEB_PORT`).
+- **Branding:** Nav title **Botato's Torn Scripts** links to `/`.
+- **Controller:** `src/controllers/player-stats-csv-controller.js` is the single entry used by `web/server.js` and CLI-oriented code paths.
+
+### Dependencies
+
+- **marked** (^15.x) for Markdown documentation pages alongside **express**.
+
+---
+
 ## v2.0.0
 
 **Release date:** 2026
 
 ### Highlights
 
-- Migrated public APIs to **CSV-first** behavior:
-  - `getRandomActiveRankedPlayerToCsv`
-  - `getActiveRankedPlayerByIdToCsv`
-  - `getFactionPlayersByHofRankToCsv`
-- Added MVC-style layering for readability:
-  - `src/controllers/`
-  - `src/models/`
-  - `src/views/`
-- Added static Torn key pool with failover support in API client.
-- Added robust CSV writer behavior:
-  - auto-create directories/files
-  - auto-ensure header line exists at line 1
-  - retry and clear messaging on Windows file lock errors
-- Added per-API static default CSV paths under `./exports/` with optional overrides.
+- **SQL-first exports:** append `INSERT` rows to `.sql` files under `./exports/`. New files include a sentinel line and comments listing all column names (same order as `CSV_HEADERS` in `src/models/player-stats-csv-model.js`), then readable multi-line `INSERT`/`VALUES` statements; text values are HTML-entity decoded for display (`src/utils/sql-append.js`).
+- **Public programmatic API:** `getRandomActiveRankedPlayerToSql`, `getActiveRankedPlayerByIdToSql`, `getFactionPlayersByHofRankToSql` (`src/index.js`).
+- **MVC-style layout:** `src/controllers/`, `src/models/`, `src/views/`, `src/services/`, `src/api/`, `src/utils/`.
+- **Static Torn API key pool** with automatic failover on rate limit and related fatal codes (`src/static-api-keys.js`, `src/api/torn-client.js`).
+- **Per-API default `.sql` paths:** `./exports/random-active-ranked-player-stats.sql`, `./exports/active-ranked-player-by-id-stats.sql`, `./exports/faction-hof-rank-player-stats.sql` (overridable via CLI `SQL_PATH`, `options.sqlPath`, or env; legacy `options.csvPath` and `*_CSV` env names still accepted as fallbacks).
+- **Windows-friendly file writes:** retries and clear errors when the export file is locked.
+- **Web UI (Express):** `npm run web` serves HTML forms for all three export APIs and a dynamic index of `exports/*.sql` with per-file viewers (`web/server.js`).
 
-### Xanax calculation changes
+### Breaking changes (vs earlier CSV / `ToCsv` naming)
 
-- Replaced ambiguous month extraction with explicit v2 snapshot delta method:
-  - `allTimeXanaxTaken` from `/v2/user/:id/personalstats?stat=xantaken`
-  - `xanaxTakenUntilLastMonth` from same endpoint with `timestamp=...`
-  - `xanaxTakenDuringLastMonth = allTimeXanaxTaken - xanaxTakenUntilLastMonth`
-- `avgXanaxPerDay` now derives from last-month delta only.
-- Removed `avgXanaxPerMonth` from responses/CSV.
-- Typical by-id API call count reduced to **3** when faction/company names are available from profile.
+- Programmatic methods named `get*ToCsv` are replaced by `get*ToSql`; output is SQL, not CSV.
+- Removed `src/utils/csv-append.js` in favor of `sql-append.js`.
+- Thin `*-csv.js` service wrappers were merged into the main service modules where applicable.
+- Controller file: `player-stats-csv-controller.js`. Faction export service: `faction-hof-rank-player-stats-csv.js`.
 
-### Tier system update
+### Xanax scoring
 
-- Updated tier thresholds:
-  - **S** `>= 90`
-  - **A** `>= 80`
-  - **B** `>= 70`
-  - **C** `>= 60`
-  - **D** `>= 50`
-  - **F** `< 50`
-- Added `F` tier to ranking/filter order.
+- Monthly window uses Torn **v2** cumulative `xantaken` snapshots (all-time vs timestamped), with `xanaxTakenDuringLastMonth` as the delta.
+- Typical **three** Torn calls for by-id when faction and company names are available from profile.
 
-### CLI improvements
+### CLI
 
-- `run-faction-hof-rank-csv.js` now supports short syntax:
-  - `node run-faction-hof-rank-csv.js HOF_RANK MAX_PLAYERS`
-  - example: `node run-faction-hof-rank-csv.js 1 5`
-- Existing syntax remains supported:
-  - `node run-faction-hof-rank-csv.js HOF_RANK [CSV_PATH] [MAX_PLAYERS]`
+- Runner scripts may still be named `run-*-csv.js` for historical reasons only; they call the SQL export stack.
+- Faction HoF: `node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]` or short form `node run-faction-hof-rank-csv.js HOF_RANK MAX_PLAYERS` (default `.sql` path when path omitted).
+
+### Web UI
+
+- Default URL `http://localhost:3847` (override with `TORN_WEB_PORT`). Requires `npm install` for the `express` dependency (`package.json`).
+
+### Documentation
+
+- `README.md` describes SQL defaults, optional paths, env vars, the web UI, and the random runner `PERIOD` token (positional only; scoring always uses the monthly v2 delta). See **v2.1.0** for scoring details and extended web UI notes.
 
 ---
 
 ## v1.0.2 (latest patch updates)
 
 ### Post-release updates
+
+*Historical note: the `TORN_XANAX_MODE` items below describe an older v1-era behavior. **v2+** does not implement that env switch; use the current README and release notes above.*
 
 - Added **ageDays**, **ageMonths**, and **ageYears** to both APIs (`random-active-ranked-player` and `active-ranked-player-by-id`).
 - Added **allTimeXanaxTaken** to both APIs (lifetime `xantaken` from Torn `personalstats`).
@@ -78,7 +90,7 @@
 
 ### Summary
 
-- **New recruitment helper:** use `run-active-ranked-by-id-csv.js` / `getActiveRankedPlayerByIdToCsv(playerId)` when you already have an ID.
+- **New recruitment helper:** use `run-active-ranked-by-id-csv.js` / by-id export API when you already have an ID (see current README for `*ToSql` names in v2).
 - **Softer scoring:** lowered the full xanax score bar from 3.25 to 3 xanax/day, producing higher numeric scores and tiers for the same usage.
 
 ---
@@ -89,12 +101,10 @@
 
 ### Changes since v1.0.0
 
-
 | Area                   | v1.0.0                                                     | v1.0.1                                                                                    |
 | ---------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | **Tier filter**        | TIER matched **exactly** (e.g. `C` = only C-tier players). | TIER means **this tier or higher** (e.g. `C` = C, B, A, or S; `S` = S only).              |
 | **Xanax score (100%)** | 100% score at **4** lifetime avg xanax per day.            | 100% score at **3.25** lifetime avg xanax per day (softer, higher scores for same usage). |
-
 
 ### Summary
 
@@ -107,8 +117,7 @@
 
 - Random active player API with xanax-based tier (S/A/B/C/D).
 - Single API call per try (profile + personalstats combined) to minimize Torn API usage.
-- Tier thresholds: S ≥ 75, A ≥ 60, B ≥ 40, C ≥ 25, D < 25 (scores 0–100).
+- Tier thresholds: S >= 75, A >= 60, B >= 40, C >= 25, D < 25 (scores 0-100).
 - Filters: active hours, ID range, max tries, period (day/month), tier (exact), has faction, has company.
 - Response: playerId, name, level, xanScore, tier, faction/company names, tornApiCallsUsed, etc.
 - Refactored codebase (constants, API client, utils, services) and improved error messages.
-

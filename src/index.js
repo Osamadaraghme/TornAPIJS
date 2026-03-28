@@ -4,15 +4,13 @@
  */
 
 const {
-    exportRandomActivePlayerToCsv,
-    exportPlayerByIdToCsv,
-    exportFactionByHofRankToCsv,
+    exportRandomActivePlayerToSql,
+    exportPlayerByIdToSql,
+    exportFactionByHofRankToSql,
 } = require('./controllers/player-stats-csv-controller.js');
 
 module.exports = {
-    // CSV-only public API
-    getRandomActiveRankedPlayerToCsv: exportRandomActivePlayerToCsv,
-    getActiveRankedPlayerByIdToCsv: exportPlayerByIdToCsv,
-    getFactionPlayersByHofRankToCsv: exportFactionByHofRankToCsv,
+    getRandomActiveRankedPlayerToSql: exportRandomActivePlayerToSql,
+    getActiveRankedPlayerByIdToSql: exportPlayerByIdToSql,
+    getFactionPlayersByHofRankToSql: exportFactionByHofRankToSql,
 };
-

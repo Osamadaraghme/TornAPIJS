@@ -1,13 +1,10 @@
 /**
- * CSV model for player stats exports.
- * Defines stable header order and row mapping from service result objects.
+ * Export model for player stats (SQL INSERT columns; same order as legacy CSV headers).
  */
 
 const CSV_HEADERS = [
     'recordedAt',
     'requestedFactionHofRank',
-    'sourceFactionId',
-    'sourceFactionName',
     'playerId',
     'name',
     'level',
@@ -25,25 +22,21 @@ const CSV_HEADERS = [
     'allTimeXanaxTaken',
     'xanaxTakenUntilLastMonth',
     'xanaxTakenDuringLastMonth',
-    'statsAvailable',
     'periodUsed',
-    'periodIsWindowed',
     'xanaxMode',
     'tornApiCallsUsed',
 ];
 
 /**
- * Build one CSV row from player stats.
+ * Build one export row object from player stats (keys match `CSV_HEADERS`).
  * @param {object} stats
- * @param {{ requestedFactionHofRank?: number|null, sourceFactionId?: number|null, sourceFactionName?: string|null }} [context]
+ * @param {{ requestedFactionHofRank?: number|null }} [context]
  * @returns {object}
  */
 function buildPlayerStatsCsvRow(stats, context = {}) {
     return {
         recordedAt: new Date().toISOString(),
         requestedFactionHofRank: context.requestedFactionHofRank ?? null,
-        sourceFactionId: context.sourceFactionId ?? null,
-        sourceFactionName: context.sourceFactionName ?? null,
         playerId: stats.playerId,
         name: stats.name,
         level: stats.level,
@@ -61,9 +54,7 @@ function buildPlayerStatsCsvRow(stats, context = {}) {
         allTimeXanaxTaken: stats.allTimeXanaxTaken,
         xanaxTakenUntilLastMonth: stats.xanaxTakenUntilLastMonth,
         xanaxTakenDuringLastMonth: stats.xanaxTakenDuringLastMonth,
-        statsAvailable: stats.statsAvailable,
         periodUsed: stats.periodUsed,
-        periodIsWindowed: stats.periodIsWindowed,
         xanaxMode: stats.xanaxMode,
         tornApiCallsUsed: stats.tornApiCallsUsed,
     };

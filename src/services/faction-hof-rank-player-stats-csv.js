@@ -1,13 +1,13 @@
 /**
  * Fetch players from a faction chosen by Hall-of-Fame rank, then append each
- * player's stats to CSV.
+ * player's stats as INSERT rows in a .sql file.
  */
 
 const { fetchTorn, fetchFaction } = require('../api/torn-client.js');
 const { getActiveRankedPlayerById } = require('./active-ranked-player-by-id.js');
-const { appendCsvRow } = require('../utils/csv-append.js');
+const { appendSqlRow } = require('../utils/sql-append.js');
 const { messageForTornError } = require('../utils/errors.js');
-const { TORN_FATAL_ERROR_CODES, DEFAULT_FACTION_HOF_STATS_CSV_PATH } = require('../constants.js');
+const { TORN_FATAL_ERROR_CODES, DEFAULT_FACTION_HOF_STATS_SQL_PATH } = require('../constants.js');
 const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 
 function asFiniteNumber(v) {
@@ -139,21 +139,24 @@ async function fetchFactionWithMembers(factionId, apiKey, counter) {
 }
 
 /**
- * Write one CSV row per member of a faction selected by HoF rank.
+ * Write one INSERT per member of a faction selected by HoF rank.
  * @param {number|string} factionHofRank - e.g. 1 means HoF faction #1
- * @param {{ csvPath?: string, maxPlayers?: number }} [options]
+ * @param {{ sqlPath?: string, csvPath?: string, maxPlayers?: number }} [options]
  * @returns {Promise<object>}
  */
-async function getFactionPlayersByHofRankToCsv(factionHofRank, options = {}) {
+async function getFactionPlayersByHofRankToSql(factionHofRank, options = {}) {
     const apiKey = process.env.TORN_API_KEY;
 
     const rank = asPositiveInt(factionHofRank);
     if (!rank) throw new Error(`Invalid factionHofRank: ${factionHofRank}`);
 
-    const csvPath = options.csvPath
+    const sqlPath = options.sqlPath
+        ?? options.csvPath
+        ?? process.env.TORN_FACTION_HOF_STATS_SQL
         ?? process.env.TORN_FACTION_HOF_STATS_CSV
+        ?? process.env.TORN_STATS_SQL
         ?? process.env.TORN_STATS_CSV
-        ?? DEFAULT_FACTION_HOF_STATS_CSV_PATH;
+        ?? DEFAULT_FACTION_HOF_STATS_SQL_PATH;
 
     const maxPlayers = asPositiveInt(options.maxPlayers ?? process.env.TORN_FACTION_MEMBER_LIMIT);
 
@@ -181,6 +184,7 @@ async function getFactionPlayersByHofRankToCsv(factionHofRank, options = {}) {
     let rowsWritten = 0;
     let playerApiCallsTotal = 0;
     const players = [];
+    let resolvedSqlPath = null;
 
     for (const playerId of selectedMemberIds) {
         const stats = await getActiveRankedPlayerById(playerId);
@@ -188,11 +192,10 @@ async function getFactionPlayersByHofRankToCsv(factionHofRank, options = {}) {
 
         const row = buildPlayerStatsCsvRow(stats, {
             requestedFactionHofRank: rank,
-            sourceFactionId: faction.factionId,
-            sourceFactionName: factionName ?? faction.factionName ?? null,
         });
 
-        const appendRes = appendCsvRow(csvPath, CSV_HEADERS, row);
+        const appendRes = appendSqlRow(sqlPath, CSV_HEADERS, row);
+        resolvedSqlPath = appendRes.path;
         if (appendRes.created) created = true;
         rowsWritten++;
         players.push(stats);
@@ -204,7 +207,7 @@ async function getFactionPlayersByHofRankToCsv(factionHofRank, options = {}) {
         sourceFactionName: factionName ?? faction.factionName ?? null,
         memberCount: memberIds.length,
         rowsWritten,
-        path: csvPath,
+        path: resolvedSqlPath ?? sqlPath,
         created,
         players,
         tornApiCallsUsed: counter.value + playerApiCallsTotal,
@@ -212,7 +215,8 @@ async function getFactionPlayersByHofRankToCsv(factionHofRank, options = {}) {
 }
 
 module.exports = {
-    getFactionPlayersByHofRankToCsv,
+    getFactionPlayersByHofRankToSql,
+    FACTION_SQL_HEADERS: CSV_HEADERS,
     FACTION_CSV_HEADERS: CSV_HEADERS,
 };
 
