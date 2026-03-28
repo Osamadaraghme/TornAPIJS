@@ -334,8 +334,8 @@ body.page-export-sql main {
   z-index: 3;
   text-align: left;
   vertical-align: bottom;
-  min-width: 7.5rem;
-  max-width: 12rem;
+  min-width: 8.5rem;
+  max-width: 14rem;
   white-space: normal;
 }
 
@@ -369,6 +369,23 @@ body.page-export-sql main {
   color: #e7ecf3;
   margin-bottom: 0.35rem;
   word-break: break-word;
+}
+
+.export-table-transposed .th-record-player-name {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #b8c5d9;
+  line-height: 1.35;
+  margin-top: 0.25rem;
+  word-break: break-word;
+}
+
+.export-table-transposed .th-record-player-name-link {
+  font-weight: 600;
+  text-decoration: none;
+}
+.export-table-transposed .th-record-player-name-link:hover {
+  text-decoration: underline;
 }
 
 .export-table-transposed .form-delete-row {

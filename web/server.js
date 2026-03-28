@@ -46,6 +46,7 @@ const RECRUITER_FIELD_ORDER = [
     'hasFaction',
     'companyName',
     'hasCompany',
+    'activeStreak',
     'ageDays',
     'ageMonths',
     'ageYears',
@@ -56,7 +57,6 @@ const RECRUITER_FIELD_ORDER = [
     'timePlayed',
     'timePlayedUntilLastMonth',
     'timePlayedDuringLastMonth',
-    'activeStreak',
     'periodUsed',
     'xanaxMode',
     'tornApiCallsUsed',
@@ -349,12 +349,20 @@ function renderPlayerStatsTable(parsed, sqlBasename) {
         const r = rows[i];
         const url = tornProfileUrlForPlayerId(r.playerId);
         const idText = r.playerId != null ? `#${escapeHtml(String(r.playerId))}` : `Row ${i + 1}`;
-        const label =
+        const idBlock =
             url && r.playerId != null
                 ? `<a class="cell-link th-profile-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${idText}</a>`
                 : idText;
+        const nameRaw = r.name != null ? String(r.name).trim() : '';
+        const nameInner = nameRaw !== '' ? escapeHtml(decodeHtmlEntities(nameRaw)) : '';
+        const nameBlock =
+            nameInner !== ''
+                ? url && r.playerId != null
+                    ? `<div class="th-record-player-name"><a class="cell-link th-profile-link th-record-player-name-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${nameInner}</a></div>`
+                    : `<div class="th-record-player-name">${nameInner}</div>`
+                : '';
         headerCells.push(`<th scope="col" class="th-record">
-  <div class="th-record-top">${label}</div>
+  <div class="th-record-top">${idBlock}${nameBlock}</div>
   <form class="form-delete-row" method="post" action="${escapeHtml(deleteAction)}" onsubmit="return confirm('Remove this row from the SQL file?');">
     <input type="hidden" name="rowIndex" value="${i}"/>
     <button type="submit" class="btn-delete">Delete</button>
