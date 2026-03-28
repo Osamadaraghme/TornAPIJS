@@ -3,7 +3,13 @@
  * Formula: XanScore = min((avg xanax per day) / XANAX_PER_DAY_FOR_FULL_SCORE, 1) * 100; tier from score.
  */
 
-const { AVG_DAYS_PER_MONTH, XANAX_PER_DAY_FOR_FULL_SCORE } = require('../constants.js');
+const {
+    AVG_DAYS_PER_MONTH,
+    XANAX_PER_DAY_FOR_FULL_SCORE,
+    HOURS_PER_DAY_FOR_FULL_TIME_SCORE,
+    RECRUITMENT_TIER_XAN_WEIGHT,
+    RECRUITMENT_TIER_TIME_WEIGHT,
+} = require('../constants.js');
 
 /** Clamp a number to [0, 1]. */
 function clamp01(x) {
@@ -108,8 +114,39 @@ function isTierAtOrAbove(playerTier, minTier) {
     return p >= m;
 }
 
+/**
+ * Score time played from cumulative seconds gained over the last month window.
+ * 100% when avg hours per day (over AVG_DAYS_PER_MONTH) equals HOURS_PER_DAY_FOR_FULL_TIME_SCORE.
+ * @param {number|null|undefined} secondsDuringLastMonth
+ * @returns {{ avgHoursPerDay: number|null, timeScore: number, timeStatsAvailable: boolean }}
+ */
+function computeTimePlayedScoreFromMonthlySeconds(secondsDuringLastMonth) {
+    if (!Number.isFinite(secondsDuringLastMonth) || secondsDuringLastMonth < 0) {
+        return { avgHoursPerDay: null, timeScore: 0, timeStatsAvailable: false };
+    }
+    const avgSecondsPerDay = secondsDuringLastMonth / AVG_DAYS_PER_MONTH;
+    const avgHoursPerDay = avgSecondsPerDay / 3600;
+    const timeScore = clamp01(avgHoursPerDay / HOURS_PER_DAY_FOR_FULL_TIME_SCORE);
+    return { avgHoursPerDay, timeScore, timeStatsAvailable: true };
+}
+
+/**
+ * Combined 0–1 score for tier: weighted xan + time (see constants for weights).
+ * @param {number} xanScore01 - from computeScores().xanScore
+ * @param {number} timeScore01 - from computeTimePlayedScoreFromMonthlySeconds().timeScore
+ */
+function combinedRecruitmentScore01(xanScore01, timeScore01) {
+    const x = Number.isFinite(xanScore01) ? clamp01(xanScore01) : 0;
+    const t = Number.isFinite(timeScore01) ? clamp01(timeScore01) : 0;
+    return clamp01(
+        RECRUITMENT_TIER_XAN_WEIGHT * x + RECRUITMENT_TIER_TIME_WEIGHT * t,
+    );
+}
+
 module.exports = {
     computeScores,
+    computeTimePlayedScoreFromMonthlySeconds,
+    combinedRecruitmentScore01,
     tierForFinalScore,
     isTierAtOrAbove,
     VALID_TIERS,

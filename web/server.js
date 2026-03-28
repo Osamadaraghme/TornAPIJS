@@ -26,13 +26,19 @@ const ROOT = path.join(__dirname, '..');
 const EXPORTS_DIR = path.join(ROOT, 'exports');
 const PORT = Number(process.env.TORN_WEB_PORT || 3847);
 
+/** Shown in export SQL but omitted from the transposed table (used only for name links). */
+const EXPORT_VIEW_HIDDEN_COLUMNS = new Set(['factionId', 'companyId']);
+
 /** Field order in export table view: recruiter-first, `recordedAt` last. */
 const RECRUITER_FIELD_ORDER = [
     'name',
     'playerId',
     'tier',
+    'combinedScore',
     'xanScore',
+    'averageTimeScore',
     'avgXanaxPerDay',
+    'avgTimePlayedHoursPerDay',
     'level',
     'hoursSinceLastAction',
     'factionName',
@@ -46,6 +52,10 @@ const RECRUITER_FIELD_ORDER = [
     'allTimeXanaxTaken',
     'xanaxTakenUntilLastMonth',
     'xanaxTakenDuringLastMonth',
+    'timePlayed',
+    'timePlayedUntilLastMonth',
+    'timePlayedDuringLastMonth',
+    'activeStreak',
     'periodUsed',
     'xanaxMode',
     'tornApiCallsUsed',
@@ -67,15 +77,29 @@ const FIELD_LABELS = {
     companyName: 'Company',
     hoursSinceLastAction: 'Hours since last action',
     xanScore: 'Xan score',
+    averageTimeScore: 'Avg. time score',
+    combinedScore: 'Combined score (75% xan / 25% time)',
     tier: 'Tier',
     avgXanaxPerDay: 'Avg. Xanax / day',
+    avgTimePlayedHoursPerDay: 'Avg. hours played / day (last month)',
     allTimeXanaxTaken: 'All-time Xanax taken',
     xanaxTakenUntilLastMonth: 'Xanax until last month',
     xanaxTakenDuringLastMonth: 'Xanax last month',
+    timePlayed: 'Time played (all-time)',
+    timePlayedUntilLastMonth: 'Time played until last month',
+    timePlayedDuringLastMonth: 'Time played (last month)',
+    activeStreak: 'Active streak',
     periodUsed: 'Period used',
-    xanaxMode: 'Xanax mode',
+    xanaxMode: 'Stats mode',
     tornApiCallsUsed: 'API calls used',
 };
+
+/** SQL columns stored as seconds; shown in the export viewer as days + hours. */
+const TIME_PLAYED_SECONDS_COLUMNS = new Set([
+    'timePlayed',
+    'timePlayedUntilLastMonth',
+    'timePlayedDuringLastMonth',
+]);
 
 function escapeHtml(s) {
     return String(s)
@@ -96,12 +120,13 @@ async function sendMarkdownPage(res, relPath, pageTitle, activeNav) {
 function nav(active) {
     const items = [
         ['/', 'Home', 'home'],
-        ['/readme', 'README', 'readme'],
-        ['/release-notes', 'Release notes', 'releases'],
         ['/api/random', 'Random ranked', 'random'],
         ['/api/by-id', 'Player by ID', 'byid'],
         ['/api/faction-hof', 'Faction HoF', 'hof'],
         ['/exports', 'SQL exports', 'exports'],
+        ['/readme', 'README', 'readme'],
+        ['/release-notes', 'Release notes', 'releases'],
+        ['/about', 'About', 'about'],
     ];
     const links = items
         .map(([href, label, id]) => {
@@ -109,7 +134,16 @@ function nav(active) {
             return `<a href="${href}"${cls}>${escapeHtml(label)}</a>`;
         })
         .join('\n');
-    return `<header><nav><a href="/" class="brand">Botato's Torn Scripts</a>${links}</nav></header>`;
+    return `<header class="site-header">
+  <div class="header-inner">
+    <nav class="nav-links" aria-label="Main"><a href="/" class="brand">Botato's Torn Scripts</a>${links}</nav>
+    <div class="quick-jump" role="search">
+      <label class="visually-hidden" for="api-quick-filter">Quick go to page or player ID</label>
+      <input type="search" id="api-quick-filter" class="quick-jump-input" autocomplete="off" placeholder="Quick go… (Ctrl+K)" spellcheck="false" aria-autocomplete="list" aria-controls="api-quick-results" aria-expanded="false"/>
+      <ul id="api-quick-results" class="quick-jump-results" role="listbox" hidden></ul>
+    </div>
+  </div>
+</header>`;
 }
 
 function layout(title, activeNav, inner, bodyClass = '') {
@@ -127,8 +161,14 @@ ${nav(activeNav)}
 <main>
 ${inner}
 </main>
+<script src="/static/site.js" defer></script>
 </body>
 </html>`;
+}
+
+/** Primary action row on API result / error pages (above the JSON block). */
+function apiBackRow(href, label = 'Search again') {
+    return `<p class="api-result-actions"><a class="btn" href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>`;
 }
 
 function orderColumnsForRecruiterView(columns) {
@@ -154,11 +194,68 @@ function tornProfileUrlForPlayerId(rawId) {
     return `https://www.torn.com/profiles.php?XID=${id}`;
 }
 
+function tornFactionProfileUrl(rawId) {
+    const n = Number(rawId);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const id = Math.floor(n);
+    if (id <= 0) return null;
+    return `https://www.torn.com/factions.php?step=profile&ID=${id}`;
+}
+
+/** In-game company instance page (matches `companies.php` in Torn). */
+function tornCompanyProfileUrl(rawId) {
+    const n = Number(rawId);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const id = Math.floor(n);
+    if (id <= 0) return null;
+    return `https://www.torn.com/companies.php?ID=${id}`;
+}
+
+/** Level / score / any numeric that rounds to 69.00 → show “(nice)” in the export viewer. */
+function isNiceSixtyNine(n) {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return false;
+    return Math.round(n * 100) / 100 === 69;
+}
+
+function niceSixtyNineSuffix(n) {
+    return isNiceSixtyNine(n) ? ' <span class="cell-nice">(nice)</span>' : '';
+}
+
 function cellTdClass(value) {
     if (value === null || value === undefined) return 'td-null';
     if (typeof value === 'boolean') return 'td-bool';
     if (typeof value === 'number') return 'td-num';
     return 'td-str';
+}
+
+/** Human-readable duration from cumulative seconds (Torn `timeplayed`). */
+function formatSecondsAsDaysHoursHtml(rawSeconds) {
+    if (rawSeconds === null || rawSeconds === undefined) {
+        return '<span class="cell-null">NULL</span>';
+    }
+    const n = Number(rawSeconds);
+    if (!Number.isFinite(n) || n < 0) {
+        return '<span class="cell-str">—</span>';
+    }
+    const s = Math.floor(n);
+    const days = Math.floor(s / 86400);
+    const hours = Math.floor((s % 86400) / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const parts = [];
+    if (days > 0) parts.push(`${days} day${days === 1 ? '' : 's'}`);
+    if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+    if (minutes > 0 && parts.length < 2) {
+        parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+    }
+    if (parts.length === 0) {
+        if (s > 0) {
+            parts.push(`${s} second${s === 1 ? '' : 's'}`);
+        } else {
+            parts.push('0 hours');
+        }
+    }
+    const label = parts.join(', ');
+    return `<span class="cell-str cell-duration" title="${escapeHtml(String(s))} seconds total">${escapeHtml(label)}</span>`;
 }
 
 function formatTableCell(value) {
@@ -169,14 +266,24 @@ function formatTableCell(value) {
         return value ? '<span class="cell-bool cell-bool-true">TRUE</span>' : '<span class="cell-bool cell-bool-false">FALSE</span>';
     }
     if (typeof value === 'number') {
-        return `<span class="cell-num">${escapeHtml(String(value))}</span>`;
+        return `<span class="cell-num">${escapeHtml(String(value))}</span>${niceSixtyNineSuffix(value)}`;
     }
     const display = decodeHtmlEntities(String(value));
+    const trimmed = display.trim();
+    if (/^-?\d+\.?\d*$|^-?\d*\.\d+$/.test(trimmed)) {
+        const asNum = Number(trimmed);
+        if (Number.isFinite(asNum)) {
+            return `<span class="cell-num">${escapeHtml(display)}</span>${niceSixtyNineSuffix(asNum)}`;
+        }
+    }
     return `<span class="cell-str">${escapeHtml(display)}</span>`;
 }
 
 function formatTransposedDataCell(col, row) {
     const v = row[col];
+    if (TIME_PLAYED_SECONDS_COLUMNS.has(col)) {
+        return formatSecondsAsDaysHoursHtml(v);
+    }
     const inner = formatTableCell(v);
     let profileId = null;
     if (col === 'playerId') {
@@ -185,16 +292,31 @@ function formatTransposedDataCell(col, row) {
     } else if (col === 'name') {
         profileId = row.playerId != null ? Number(row.playerId) : null;
     }
-    const url = tornProfileUrlForPlayerId(profileId);
-    if (url && (col === 'name' || col === 'playerId')) {
-        return `<a class="cell-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+    const profileUrl = tornProfileUrlForPlayerId(profileId);
+    if (profileUrl && (col === 'name' || col === 'playerId')) {
+        return `<a class="cell-link" href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+    }
+    if (col === 'factionName') {
+        const factionUrl = tornFactionProfileUrl(row.factionId);
+        const hasLabel = v != null && String(v).trim() !== '';
+        if (factionUrl && hasLabel) {
+            return `<a class="cell-link" href="${escapeHtml(factionUrl)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+        }
+    }
+    if (col === 'companyName') {
+        const companyUrl = tornCompanyProfileUrl(row.companyId);
+        const hasLabel = v != null && String(v).trim() !== '';
+        if (companyUrl && hasLabel) {
+            return `<a class="cell-link" href="${escapeHtml(companyUrl)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+        }
     }
     return inner;
 }
 
 function renderPlayerStatsTable(parsed, sqlBasename) {
     const { columns, rows } = parsed;
-    const orderedColumns = orderColumnsForRecruiterView(columns);
+    const visibleColumns = columns.filter((c) => !EXPORT_VIEW_HIDDEN_COLUMNS.has(c));
+    const orderedColumns = orderColumnsForRecruiterView(visibleColumns);
     const deleteAction = `/exports/view/${encodeURIComponent(sqlBasename)}/delete-row`;
     if (rows.length === 0) {
         return `<p class="export-empty muted">No data rows in this file. The header lists <strong>${columns.length}</strong> field(s); add rows from an API or restore from backup.</p>`;
@@ -222,7 +344,8 @@ function renderPlayerStatsTable(parsed, sqlBasename) {
             const cells = rows
                 .map((row) => {
                     const v = row[col];
-                    return `<td class="${cellTdClass(v)}">${formatTransposedDataCell(col, row)}</td>`;
+                    const tdCls = TIME_PLAYED_SECONDS_COLUMNS.has(col) ? 'td-str' : cellTdClass(v);
+                    return `<td class="${tdCls}">${formatTransposedDataCell(col, row)}</td>`;
                 })
                 .join('');
             return `<tr>${fieldCell}${cells}</tr>`;
@@ -297,6 +420,19 @@ app.get('/release-notes', async (req, res) => {
     }
 });
 
+app.get('/about', (req, res) => {
+    const tornProfile = 'https://www.torn.com/profiles.php?XID=3961724';
+    const body = `
+<div class="card about-page">
+  <h1>About</h1>
+  <p class="about-lead">Hi — I’m <strong>Botato</strong> (<a href="${escapeHtml(tornProfile)}" target="_blank" rel="noopener noreferrer">Torn ID 3961724</a>). These days I’m a programmer who spends far too much time in <strong>Torn City</strong> (former teacher — the classroom chapter is closed).</p>
+  <p>This little site is a set of scripts I use for recruitment and stats: nothing fancy, just tools that talk to Torn’s API and land tidy SQL exports. If you’re here, you probably care about factions, numbers, or both — same here.</p>
+  <p>In-game I’m a <strong>merit whore</strong> in the best/worst sense: I’m chasing every award I can, and I’m trying to pop as much Xanax as I can while I’m at it. I don’t really do Xanax jokes — I care about the grind, not the punchlines. When I’m not up against API limits, I’m usually tweaking a formula or losing an argument with a linter.</p>
+  <p class="about-footer muted">Thanks for stopping by. Good luck in the city.</p>
+</div>`;
+    res.type('html').send(layout('About', 'about', body));
+});
+
 app.get('/', async (req, res) => {
     const files = await listSqlBasenames();
     const exportLinks = files.length
@@ -305,7 +441,7 @@ app.get('/', async (req, res) => {
     const body = `
 <h1>Home</h1>
 <div class="card">
-  <p>Documentation: <a href="/readme">README</a> · <a href="/release-notes">Release notes</a></p>
+  <p>Docs: <a href="/readme">README</a> · <a href="/release-notes">Release notes</a> · <a href="/about">About</a></p>
   <p>Run the three recruitment APIs from their pages. Export files appear under <code>exports/</code>.</p>
   <p><a class="btn" href="/api/random">Random active ranked</a>
   <a class="btn" href="/api/by-id">Player by ID</a>
@@ -439,21 +575,24 @@ app.post('/api/random/run', async (req, res) => {
         const base = path.basename(out.path);
         const body = `
 <h1>Random ranked — result</h1>
+${apiBackRow('/api/random', 'Search again')}
 <p class="msg-ok">Appended row. File: <a href="/exports/view/${encodeURIComponent(base)}">${escapeHtml(out.path)}</a></p>
-<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>
-<p><a href="/api/random">Run again</a></p>`;
+<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>`;
         res.type('html').send(layout('Random result', 'random', body));
     } catch (err) {
-        const body = `<h1>Random ranked — error</h1><p class="msg-err">${escapeHtml(err.message || err)}</p><p><a href="/api/random">Back</a></p>`;
+        const body = `<h1>Random ranked — error</h1>${apiBackRow('/api/random', 'Search again')}<p class="msg-err">${escapeHtml(err.message || err)}</p>`;
         res.status(500).type('html').send(layout('Error', 'random', body));
     }
 });
 
 app.get('/api/by-id', (req, res) => {
+    const raw = req.query.playerId ?? req.query.q ?? '';
+    const prefill = String(raw).trim();
+    const safeVal = prefill ? escapeHtml(prefill) : '';
     const body = `
 <h1>Player by ID</h1>
 <form method="post" action="/api/by-id/run" class="card">
-  <label>Player ID</label><input name="playerId" required/>
+  <label>Player ID</label><input name="playerId" required value="${safeVal}"/>
   <label>SQL path (optional)</label><input name="sqlPath" placeholder="default exports path"/>
   <button type="submit">Fetch &amp; append SQL</button>
 </form>`;
@@ -463,7 +602,7 @@ app.get('/api/by-id', (req, res) => {
 app.post('/api/by-id/run', async (req, res) => {
     const { playerId, sqlPath } = req.body;
     if (playerId == null || String(playerId).trim() === '') {
-        res.status(400).type('html').send(layout('Error', 'byid', '<p class="msg-err">playerId required</p><a href="/api/by-id">Back</a>'));
+        res.status(400).type('html').send(layout('Error', 'byid', `${apiBackRow('/api/by-id', 'Search again')}<p class="msg-err">playerId required</p>`));
         return;
     }
     const opts = sqlPath && String(sqlPath).trim() ? { sqlPath: String(sqlPath).trim() } : {};
@@ -472,12 +611,12 @@ app.post('/api/by-id/run', async (req, res) => {
         const base = path.basename(out.path);
         const body = `
 <h1>Player by ID — result</h1>
+${apiBackRow('/api/by-id', 'Search again')}
 <p class="msg-ok">Appended row. File: <a href="/exports/view/${encodeURIComponent(base)}">${escapeHtml(out.path)}</a></p>
-<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>
-<p><a href="/api/by-id">Again</a></p>`;
+<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>`;
         res.type('html').send(layout('By ID result', 'byid', body));
     } catch (err) {
-        const body = `<h1>Player by ID — error</h1><p class="msg-err">${escapeHtml(err.message || err)}</p><p><a href="/api/by-id">Back</a></p>`;
+        const body = `<h1>Player by ID — error</h1>${apiBackRow('/api/by-id', 'Search again')}<p class="msg-err">${escapeHtml(err.message || err)}</p>`;
         res.status(500).type('html').send(layout('Error', 'byid', body));
     }
 });
@@ -497,7 +636,7 @@ app.get('/api/faction-hof', (req, res) => {
 app.post('/api/faction-hof/run', async (req, res) => {
     const { hofRank, maxPlayers, sqlPath } = req.body;
     if (hofRank == null || String(hofRank).trim() === '') {
-        res.status(400).type('html').send(layout('Error', 'hof', '<p class="msg-err">hofRank required</p><a href="/api/faction-hof">Back</a>'));
+        res.status(400).type('html').send(layout('Error', 'hof', `${apiBackRow('/api/faction-hof', 'Search again')}<p class="msg-err">hofRank required</p>`));
         return;
     }
     const opts = {};
@@ -508,12 +647,12 @@ app.post('/api/faction-hof/run', async (req, res) => {
         const base = path.basename(out.path);
         const body = `
 <h1>Faction HoF — result</h1>
+${apiBackRow('/api/faction-hof', 'Search again')}
 <p class="msg-ok">Wrote ${escapeHtml(String(out.rowsWritten))} row(s). File: <a href="/exports/view/${encodeURIComponent(base)}">${escapeHtml(out.path)}</a></p>
-<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>
-<p><a href="/api/faction-hof">Again</a></p>`;
+<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>`;
         res.type('html').send(layout('HoF result', 'hof', body));
     } catch (err) {
-        const body = `<h1>Faction HoF — error</h1><p class="msg-err">${escapeHtml(err.message || err)}</p><p><a href="/api/faction-hof">Back</a></p>`;
+        const body = `<h1>Faction HoF — error</h1>${apiBackRow('/api/faction-hof', 'Search again')}<p class="msg-err">${escapeHtml(err.message || err)}</p>`;
         res.status(500).type('html').send(layout('Error', 'hof', body));
     }
 });

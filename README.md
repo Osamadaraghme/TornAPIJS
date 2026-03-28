@@ -2,6 +2,8 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
+**Current version:** **2.3.0** (see `package.json` and `RELEASE_NOTES.md`).
+
 All public APIs append `INSERT` rows to `.sql` files (create if missing, append if they exist). New files include comment lines that list every column name in the same order as the model (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
 ## Architecture (MVC + services)
@@ -62,12 +64,24 @@ The UI uses the same export controllers as the CLI. Pages:
 |------|---------|
 | `/` | Home with shortcuts and a list of current `.sql` files in `exports/` |
 | `/api/random` | Random active ranked (form submits to append one `INSERT`) |
-| `/api/by-id` | Player by ID |
+| `/api/by-id` | Player by ID (optional query `?playerId=` or `?q=` pre-fills the ID field) |
 | `/api/faction-hof` | Faction HoF rank export |
 | `/exports` | Index of all `exports/*.sql` files (dynamic) |
-| `/exports/view/<file>.sql` | Read-only view of one export file |
+| `/exports/view/<file>.sql` | Read-only view of one export file (time played columns show days & hours; SQL still stores seconds) |
 | `/readme` | This documentation rendered from `README.md` |
 | `/release-notes` | Changelog rendered from `RELEASE_NOTES.md` |
+| `/about` | Short bio / credits for the author |
+
+**Navigation**
+
+- **Quick go** (search box in the header): filter pages by name; **Ctrl+K** / **Cmd+K** or **`/`** (when not typing in a form field) focuses it. Type part of a page name or choose from the list; **Enter** opens the highlighted row.
+- **Numeric shortcut:** digits only (e.g. `3225726`) offers **Player by ID — …** and opens `/api/by-id?playerId=…` with that ID filled in.
+- **API results:** after Random / By ID / Faction HoF runs, **Search again** returns to the same form (above the JSON block).
+
+**Export table links**
+
+- **Player name**, **player ID**, and column headers link to Torn profiles (`profiles.php?XID=…`).
+- **Faction** and **company** names link to Torn when the row includes **`factionId`** and **`companyId`** (written on new exports from v2.3.0). Older `.sql` files without those columns show plain text until you re-append rows or rewrite the file (e.g. after a row delete, the web UI normalizes to the current schema with `NULL` for missing IDs).
 
 Set `TORN_API_KEY` in the environment if you are not using the default key pool.
 
@@ -99,7 +113,7 @@ Arguments (positional — earlier slots must be filled to reach later ones):
 ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL] [SQL_PATH]
 ```
 
-The 6th token (`PERIOD`) is only there to keep argument positions aligned with older CLIs; **the random ranked service always uses the monthly xanax window** (`v2-monthly-delta`) and does not read `day` vs `month`. Pass `month` in examples.
+The 6th token (`PERIOD`) is only there to keep argument positions aligned with older CLIs; **the random ranked service always uses the monthly v2 window** for xanax and time played (`v2-recruitment-stats` in exports) and does not read `day` vs `month`. Pass `month` in examples.
 
 Tier behavior (`TIER` is case-insensitive):
 - `S` -> S only
@@ -110,7 +124,7 @@ Tier behavior (`TIER` is case-insensitive):
 - `F` -> any tier
 - `ALL` -> ignore tier filter
 
-Tier score ranges (`xanScore`):
+Tier score ranges (from **`combinedScore`**, 75% xan / 25% time — see [How scoring works](#how-scoring-works-xan-score-and-tier)):
 - `S`: `>= 90`
 - `A`: `>= 80` and `< 90`
 - `B`: `>= 70` and `< 80`
@@ -169,6 +183,7 @@ Optional: `node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]` w
   - by-id API: `./exports/active-ranked-player-by-id-stats.sql`
   - faction HoF API: `./exports/faction-hof-rank-player-stats.sql`
 - New files start with a sentinel line and comments listing all column headers, then multi-line `INSERT INTO "player_stats" (...)` / `VALUES (...)` blocks (one row per statement). String fields are HTML-entity decoded before quoting (e.g. `&#039;` becomes a normal apostrophe). Table name is `player_stats` (see `src/utils/sql-append.js`).
+- Player rows include **`factionId`** and **`companyId`** (alongside **`factionName`** / **`companyName`**) so the web viewer can link to Torn’s faction and company pages. Those two ID columns are hidden in the transposed table to keep the recruiter view tidy.
 - Override path per call with CLI `[SQL_PATH]`, or `options.sqlPath` / `options.csvPath` (legacy alias) in code.
 - Env overrides per API: `TORN_RANDOM_STATS_SQL`, `TORN_BY_ID_STATS_SQL`, `TORN_FACTION_HOF_STATS_SQL`. Legacy `*_CSV` and `TORN_STATS_CSV` env names are still read as fallbacks.
 - Global fallback: `TORN_STATS_SQL` or `TORN_STATS_CSV`.
@@ -193,9 +208,28 @@ xanScore = min(avgXanaxPerDay / XANAX_PER_DAY_FOR_FULL_SCORE, 1) * 100
 
 - **`XANAX_PER_DAY_FOR_FULL_SCORE`** is **3**: an average of **3 Xanax per day** maps to a **100** score; higher usage still **caps at 100**.
 
-### Tier (S / A / B / C / D / F)
+### Average time played (0–100)
 
-Tiers are derived from the **0–100** score (`tierForFinalScore`):
+From **v2.2.0**, exports use Torn **v2** cumulative **`timeplayed`** (seconds) the same way as xanax: all-time minus the value at a **one month ago** timestamp gives seconds played in the last month. That delta is turned into **average seconds per day** using **`AVG_DAYS_PER_MONTH`**, then into **average hours per day** (`avgTimePlayedHoursPerDay`).
+
+```text
+averageTimeScore = min(avgHoursPerDay / HOURS_PER_DAY_FOR_FULL_TIME_SCORE, 1) * 100
+```
+
+- **`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** is **6**: an average of **6 hours played per day** over that window maps to a **100** time score; more time still **caps at 100**.
+
+### Combined score and tier (S / A / B / C / D / F)
+
+**Tier** is **not** based on xanax alone anymore. The app builds a **combined 0–1** score, then converts it to 0–100 for banding:
+
+```text
+combined01 = 0.75 * (xanScore as 0–1) + 0.25 * (averageTimeScore as 0–1)
+combinedScore = combined01 * 100
+```
+
+Constants **`RECRUITMENT_TIER_XAN_WEIGHT`** (0.75) and **`RECRUITMENT_TIER_TIME_WEIGHT`** (0.25) live in `src/constants.js`. Exports include **`xanScore`**, **`averageTimeScore`**, and **`combinedScore`** (all 0–100) so recruiters can see both components.
+
+Tiers (`tierForFinalScore`) use **`combinedScore`**:
 
 | Tier | Score range |
 |------|-------------|
@@ -206,16 +240,18 @@ Tiers are derived from the **0–100** score (`tierForFinalScore`):
 | **D** | ≥ 50 and &lt; 60 |
 | **F** | &lt; 50 |
 
-The **random ranked** runner’s `TIER` filter (“this tier or higher”) uses the same ordering; see the tier table under [Random active ranked API](#random-active-ranked-api).
+The **random ranked** runner’s `TIER` filter (“this tier or higher”) uses this **combined** tier; see the tier table under [Random active ranked API](#random-active-ranked-api).
 
-## Notes on xanax window accuracy
+### Other stats (v2.2.0)
 
-- Xanax month fields now use Torn v2 cumulative snapshots:
+- **`activestreak`** comes from the same v2 personalstats batch as current `xantaken` / `timeplayed` (current streak only; not used in tier).
+- API calls: two v2 **`/v2/user/:id/personalstats`** requests per player (all-time `xantaken,timeplayed,activestreak`, then `xantaken,timeplayed` at the month-ago timestamp).
+
+## Notes on xanax and timeplayed window accuracy
+
+- **Xanax** month fields use Torn v2 cumulative snapshots:
   - all-time `xantaken`
   - `xantaken` at last-month timestamp
   - `xanaxTakenDuringLastMonth = allTimeXanaxTaken - xanaxTakenUntilLastMonth`
-- New output fields on all APIs:
-  - `allTimeXanaxTaken`
-  - `xanaxTakenUntilLastMonth`
-  - `xanaxTakenDuringLastMonth`
-  - `avgXanaxPerDay` (derived from last-month delta / average days per month)
+- **Time played** uses the same pattern for **`timeplayed`** (seconds): `timePlayedDuringLastMonth`, plus all-time and “until last month” columns in exports.
+- Output fields (all three SQL export APIs) include xanax columns above, **time** columns (`timePlayed`, `timePlayedUntilLastMonth`, `timePlayedDuringLastMonth`, `avgTimePlayedHoursPerDay`), **scores** (`averageTimeScore`, `combinedScore`), **`activeStreak`**, and **`avgXanaxPerDay`** (from last-month xanax delta / average days per month).

@@ -8,7 +8,6 @@ const {
     fetchUser,
     fetchFactionName,
     fetchCompanyName,
-    fetchUserPersonalStatV2,
 } = require('../api/torn-client.js');
 const {
     extractLastActionTimestampSeconds,
@@ -22,7 +21,14 @@ const {
     extractCompanyNameFromProfile,
     extractFactionNameFromProfile,
 } = require('../utils/extractors.js');
-const { computeScores, tierForFinalScore, isTierAtOrAbove, VALID_TIERS } = require('../utils/scoring.js');
+const {
+    computeScores,
+    computeTimePlayedScoreFromMonthlySeconds,
+    combinedRecruitmentScore01,
+    tierForFinalScore,
+    isTierAtOrAbove,
+    VALID_TIERS,
+} = require('../utils/scoring.js');
 const { messageForTornError, buildNoPlayerFoundError } = require('../utils/errors.js');
 const {
     TORN_FATAL_ERROR_CODES,
@@ -31,12 +37,8 @@ const {
 } = require('../constants.js');
 const { appendSqlRow } = require('../utils/sql-append.js');
 const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
+const { fetchMonthlyV2RecruitmentStats } = require('../utils/monthly-v2-recruitment-stats.js');
 const { randomIntInclusive } = require('../utils/helpers.js');
-
-function toFiniteNumber(value) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : null;
-}
 
 function throwOnTornError(errorObj) {
     if (!errorObj) return;
@@ -71,37 +73,7 @@ function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) 
     return true;
 }
 
-async function fetchMonthlyXanaxStats(playerId, apiKey, counter) {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    const monthAgoTimestamp = nowSeconds - Math.floor(AVG_DAYS_PER_MONTH * 86400);
-
-    const allTimeRes = await fetchUserPersonalStatV2(playerId, 'xantaken', apiKey, counter);
-    throwOnTornError(allTimeRes?.raw?.error);
-    const untilLastMonthRes = await fetchUserPersonalStatV2(
-        playerId,
-        'xantaken',
-        apiKey,
-        counter,
-        monthAgoTimestamp,
-    );
-    throwOnTornError(untilLastMonthRes?.raw?.error);
-
-    const allTimeXanaxTaken = toFiniteNumber(allTimeRes.value);
-    const xanaxTakenUntilLastMonth = toFiniteNumber(untilLastMonthRes.value);
-    let xanaxTakenDuringLastMonth = null;
-    if (allTimeXanaxTaken != null && xanaxTakenUntilLastMonth != null) {
-        xanaxTakenDuringLastMonth = Math.max(0, allTimeXanaxTaken - xanaxTakenUntilLastMonth);
-    }
-
-    return {
-        allTimeXanaxTaken,
-        xanaxTakenUntilLastMonth,
-        xanaxTakenDuringLastMonth,
-        periodIsWindowed: xanaxTakenDuringLastMonth != null,
-    };
-}
-
-function buildResult(id, profileData, scores, counter, ageDays, xanaxStats) {
+function buildResult(id, profileData, scores, snap, timeScoring, combined01, counter, ageDays) {
     const name = extractName(profileData);
     const level = extractLevel(profileData);
     const hasFaction = hasFactionFromProfile(profileData);
@@ -111,8 +83,9 @@ function buildResult(id, profileData, scores, counter, ageDays, xanaxStats) {
     const hoursSinceLastAction = (nowSeconds - lastActionTs) / 3600;
 
     const xanScorePct = scores.xanScore * 100;
-    const finalScorePct = scores.finalScore * 100;
-    const tier = tierForFinalScore(finalScorePct);
+    const averageTimeScorePct = timeScoring.timeScore * 100;
+    const combinedScorePct = combined01 * 100;
+    const tier = tierForFinalScore(combinedScorePct);
 
     const factionId = extractFactionId(profileData);
     const factionNameFromProfile = extractFactionNameFromProfile(profileData);
@@ -132,15 +105,23 @@ function buildResult(id, profileData, scores, counter, ageDays, xanaxStats) {
         companyName: companyNameFromProfile ?? null,
         hoursSinceLastAction: Number(hoursSinceLastAction.toFixed(2)),
         xanScore: Number(xanScorePct.toFixed(2)),
+        averageTimeScore: Number(averageTimeScorePct.toFixed(2)),
+        combinedScore: Number(combinedScorePct.toFixed(2)),
         tier,
         avgXanaxPerDay: scores.avgXanaxPerDay != null ? Number(scores.avgXanaxPerDay.toFixed(4)) : null,
-        allTimeXanaxTaken: xanaxStats.allTimeXanaxTaken,
-        xanaxTakenUntilLastMonth: xanaxStats.xanaxTakenUntilLastMonth,
-        xanaxTakenDuringLastMonth: xanaxStats.xanaxTakenDuringLastMonth,
+        avgTimePlayedHoursPerDay:
+            timeScoring.avgHoursPerDay != null ? Number(timeScoring.avgHoursPerDay.toFixed(4)) : null,
+        allTimeXanaxTaken: snap.allTimeXanaxTaken,
+        xanaxTakenUntilLastMonth: snap.xanaxTakenUntilLastMonth,
+        xanaxTakenDuringLastMonth: snap.xanaxTakenDuringLastMonth,
+        timePlayed: snap.allTimeTimePlayed,
+        timePlayedUntilLastMonth: snap.timePlayedUntilLastMonth,
+        timePlayedDuringLastMonth: snap.timePlayedDuringLastMonth,
+        activeStreak: snap.activeStreak,
         statsAvailable: Boolean(scores.statsAvailable),
         periodUsed: 'month',
-        periodIsWindowed: xanaxStats.periodIsWindowed,
-        xanaxMode: 'v2-monthly-delta',
+        periodIsWindowed: snap.xanaxTakenDuringLastMonth != null,
+        xanaxMode: 'v2-recruitment-stats',
         tornApiCallsUsed: counter.value,
         _factionId: factionId,
         _factionNameFromProfile: factionNameFromProfile,
@@ -194,26 +175,41 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         runStats.passedFiltersCount++;
 
         const ageDays = extractAgeDays(profileData);
-        const xanaxStats = await fetchMonthlyXanaxStats(id, apiKey, counter);
+        const snap = await fetchMonthlyV2RecruitmentStats(id, apiKey, counter);
         const scores = computeScores({
-            xanaxTakenTotal: xanaxStats.allTimeXanaxTaken,
-            xanaxTakenForPeriod: xanaxStats.xanaxTakenDuringLastMonth,
+            xanaxTakenTotal: snap.allTimeXanaxTaken,
+            xanaxTakenForPeriod: snap.xanaxTakenDuringLastMonth,
             ageDays,
             period: 'month',
         });
-
-        const tier = tierForFinalScore(scores.finalScore * 100);
+        const timeScoring = computeTimePlayedScoreFromMonthlySeconds(snap.timePlayedDuringLastMonth);
+        const combined01 = combinedRecruitmentScore01(scores.xanScore, timeScoring.timeScore);
+        const tier = tierForFinalScore(combined01 * 100);
         if (VALID_TIERS.includes(desiredTier) && !isTierAtOrAbove(tier, desiredTier)) {
             continue;
         }
 
-        const result = buildResult(id, profileData, scores, counter, ageDays, xanaxStats);
+        const result = buildResult(
+            id,
+            profileData,
+            scores,
+            snap,
+            timeScoring,
+            combined01,
+            counter,
+            ageDays,
+        );
         result.factionName = result._factionNameFromProfile ?? (result._factionId
             ? await fetchFactionName(result._factionId, apiKey, counter)
             : null);
         result.companyName = result._companyNameFromProfile ?? (result._companyId
             ? await fetchCompanyName(result._companyId, apiKey, counter)
             : null);
+
+        result.factionId = result._factionId != null ? Number(result._factionId) : null;
+        result.companyId = result._companyId != null ? Number(result._companyId) : null;
+        if (result.factionId != null && !Number.isFinite(result.factionId)) result.factionId = null;
+        if (result.companyId != null && !Number.isFinite(result.companyId)) result.companyId = null;
 
         delete result._factionId;
         delete result._factionNameFromProfile;

@@ -1,5 +1,45 @@
 # Release notes
 
+## v2.3.0
+
+**Release date:** March 2026
+
+### Highlights
+
+- **Export schema:** `factionId` and `companyId` added to `CSV_HEADERS` / `buildPlayerStatsCsvRow` (`src/models/player-stats-csv-model.js`); populated from profile in `active-ranked-player-by-id` and `random-active-ranked-player` (still used by Faction HoF export).
+- **Web export viewer:** Faction and company **names** link to Torn (`factions.php?step=profile&ID=…`, `companies.php?ID=…`) when IDs are present; ID columns are stored in SQL but omitted from the transposed field list (`web/server.js`).
+- **Web UX:** Header **Quick go** search (`web/public/site.js`) — **Ctrl+K** / **Cmd+K** or **`/`** to focus; filter Home / APIs / exports / docs; all-digit query jumps to **Player by ID** with that ID pre-filled. **`/api/by-id?playerId=`** or **`?q=`** pre-fills the form.
+- **API result pages:** Prominent **Search again** button (Random, By ID, Faction HoF — success and error).
+- **Layout:** Header uses `site-header` / `nav-links` + quick jump; styles in `web/public/style.css`.
+
+### Notes
+
+- Older `.sql` exports without `factionId` / `companyId` still display; faction/company links appear after new appends or after the file is normalized to the current headers (e.g. row delete in the viewer).
+
+### Dependencies
+
+- Unchanged (**express**, **marked**).
+
+---
+
+## v2.2.0
+
+**Release date:** 2026
+
+### Highlights
+
+- **Torn v2 personalstats (batched):** Per player, two calls — `stat=xantaken,timeplayed,activestreak` (current) and `stat=xantaken,timeplayed` with a **one month ago** timestamp — implemented in `src/utils/monthly-v2-recruitment-stats.js` and `fetchUserPersonalStatsV2` (`src/api/torn-client.js`).
+- **New export / response fields:** `timePlayed` (all-time seconds), `timePlayedUntilLastMonth`, `timePlayedDuringLastMonth`, `avgTimePlayedHoursPerDay`, `averageTimeScore` (0–100; **6 h/day** average over the window = 100%), `combinedScore` (0–100), `activeStreak` (informational; not used in tier).
+- **Tier = 75% xan + 25% time:** `combinedScore = 0.75 * xanScore + 0.25 * averageTimeScore` (each 0–100); S/A/B/C/D/F bands unchanged (`tierForFinalScore`). Random **TIER** filter uses this combined tier.
+- **Constants:** `HOURS_PER_DAY_FOR_FULL_TIME_SCORE`, `RECRUITMENT_TIER_XAN_WEIGHT`, `RECRUITMENT_TIER_TIME_WEIGHT` in `src/constants.js`; helpers in `src/utils/scoring.js`.
+- **Web table:** Recruiter column order updated for combined / time scores (`web/server.js`).
+
+### Dependencies
+
+- Unchanged (**express**, **marked**).
+
+---
+
 ## v2.1.0
 
 **Release date:** 2026
@@ -8,7 +48,7 @@
 
 - **Web export viewer:** Transposed table (recruiter field order; **Avg. Xanax / day** directly under **Xan score**), sticky field column and header row, consistent left alignment, HTML-entity–friendly display.
 - **Row delete:** Each record column has **Delete**; `POST` rewrites the `.sql` file via `writeSqlExportFile` (`src/utils/sql-append.js`), normalizing rows to current `CSV_HEADERS`.
-- **Torn links:** Player name, player ID, and `#id` header link to `profiles.php?XID=…` (new tab).
+- **Torn links:** Player name, player ID, and `#id` header link to `profiles.php?XID=…` (new tab). Faction and company name links were added in **v2.3.0** (requires `factionId` / `companyId` in the export row).
 - **Export schema:** SQL `INSERT`s omit `sourceFactionId`, `sourceFactionName`, `statsAvailable`, and `periodIsWindowed` (see `src/models/player-stats-csv-model.js`). Append logic treats any file whose first line starts with `-- TornAPIJS:player_stats:` as our export so schema changes do not duplicate headers.
 - **In-browser docs:** Routes `/readme` and `/release-notes` render `README.md` and this file with **marked** (`package.json`).
 - **README:** “How scoring works” (xan score, tier, monthly delta), stopping the web server and freeing port **3847** (Ctrl+C, PowerShell `Stop-Process`, optional `TORN_WEB_PORT`).
