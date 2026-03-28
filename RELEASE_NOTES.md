@@ -1,24 +1,46 @@
 # Release notes
 
+## v2.1.0
+
+**Release date:** 2026
+
+### Highlights
+
+- **Web export viewer:** Transposed table (recruiter field order; **Avg. Xanax / day** directly under **Xan score**), sticky field column and header row, consistent left alignment, HTML-entity–friendly display.
+- **Row delete:** Each record column has **Delete**; `POST` rewrites the `.sql` file via `writeSqlExportFile` (`src/utils/sql-append.js`), normalizing rows to current `CSV_HEADERS`.
+- **Torn links:** Player name, player ID, and `#id` header link to `profiles.php?XID=…` (new tab).
+- **Export schema:** SQL `INSERT`s omit `sourceFactionId`, `sourceFactionName`, `statsAvailable`, and `periodIsWindowed` (see `src/models/player-stats-csv-model.js`). Append logic treats any file whose first line starts with `-- TornAPIJS:player_stats:` as our export so schema changes do not duplicate headers.
+- **In-browser docs:** Routes `/readme` and `/release-notes` render `README.md` and this file with **marked** (`package.json`).
+- **README:** “How scoring works” (xan score, tier, monthly delta), stopping the web server and freeing port **3847** (Ctrl+C, PowerShell `Stop-Process`, optional `TORN_WEB_PORT`).
+- **Branding:** Nav title **Botato's Torn Scripts** links to `/`.
+- **Controller:** `src/controllers/player-stats-csv-controller.js` is the single entry used by `web/server.js` and CLI-oriented code paths.
+
+### Dependencies
+
+- **marked** (^15.x) for Markdown documentation pages alongside **express**.
+
+---
+
 ## v2.0.0
 
 **Release date:** 2026
 
 ### Highlights
 
-- **SQL-first exports:** append `INSERT` rows to `.sql` files under `./exports/`. New files include a sentinel line and comments listing all column names (same order as `CSV_HEADERS` in `src/models/player-stats-csv-model.js`), then `INSERT INTO "player_stats" (...)` statements (`src/utils/sql-append.js`).
+- **SQL-first exports:** append `INSERT` rows to `.sql` files under `./exports/`. New files include a sentinel line and comments listing all column names (same order as `CSV_HEADERS` in `src/models/player-stats-csv-model.js`), then readable multi-line `INSERT`/`VALUES` statements; text values are HTML-entity decoded for display (`src/utils/sql-append.js`).
 - **Public programmatic API:** `getRandomActiveRankedPlayerToSql`, `getActiveRankedPlayerByIdToSql`, `getFactionPlayersByHofRankToSql` (`src/index.js`).
 - **MVC-style layout:** `src/controllers/`, `src/models/`, `src/views/`, `src/services/`, `src/api/`, `src/utils/`.
 - **Static Torn API key pool** with automatic failover on rate limit and related fatal codes (`src/static-api-keys.js`, `src/api/torn-client.js`).
 - **Per-API default `.sql` paths:** `./exports/random-active-ranked-player-stats.sql`, `./exports/active-ranked-player-by-id-stats.sql`, `./exports/faction-hof-rank-player-stats.sql` (overridable via CLI `SQL_PATH`, `options.sqlPath`, or env; legacy `options.csvPath` and `*_CSV` env names still accepted as fallbacks).
 - **Windows-friendly file writes:** retries and clear errors when the export file is locked.
+- **Web UI (Express):** `npm run web` serves HTML forms for all three export APIs and a dynamic index of `exports/*.sql` with per-file viewers (`web/server.js`).
 
 ### Breaking changes (vs earlier CSV / `ToCsv` naming)
 
 - Programmatic methods named `get*ToCsv` are replaced by `get*ToSql`; output is SQL, not CSV.
 - Removed `src/utils/csv-append.js` in favor of `sql-append.js`.
 - Thin `*-csv.js` service wrappers were merged into the main service modules where applicable.
-- Controller file: `player-stats-export-controller.js`. Faction export service: `faction-hof-rank-player-stats-sql.js`.
+- Controller file: `player-stats-csv-controller.js`. Faction export service: `faction-hof-rank-player-stats-csv.js`.
 
 ### Xanax scoring
 
@@ -30,9 +52,13 @@
 - Runner scripts may still be named `run-*-csv.js` for historical reasons only; they call the SQL export stack.
 - Faction HoF: `node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]` or short form `node run-faction-hof-rank-csv.js HOF_RANK MAX_PLAYERS` (default `.sql` path when path omitted).
 
+### Web UI
+
+- Default URL `http://localhost:3847` (override with `TORN_WEB_PORT`). Requires `npm install` for the `express` dependency (`package.json`).
+
 ### Documentation
 
-- `README.md` describes SQL defaults, optional paths, env vars, and the random runner `PERIOD` token (positional only; scoring always uses the monthly v2 delta).
+- `README.md` describes SQL defaults, optional paths, env vars, the web UI, and the random runner `PERIOD` token (positional only; scoring always uses the monthly v2 delta). See **v2.1.0** for scoring details and extended web UI notes.
 
 ---
 
@@ -40,7 +66,7 @@
 
 ### Post-release updates
 
-*Historical note: the `TORN_XANAX_MODE` items below describe an older v1-era behavior. **v2.0.0+** does not implement that env switch; use the current README and v2.0.0 section above.*
+*Historical note: the `TORN_XANAX_MODE` items below describe an older v1-era behavior. **v2+** does not implement that env switch; use the current README and release notes above.*
 
 - Added **ageDays**, **ageMonths**, and **ageYears** to both APIs (`random-active-ranked-player` and `active-ranked-player-by-id`).
 - Added **allTimeXanaxTaken** to both APIs (lifetime `xantaken` from Torn `personalstats`).

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Run from project folder:
  *   PowerShell:
  *     node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]
@@ -8,7 +8,7 @@
  * and appends one INSERT per member to a .sql file.
  */
 
-const { exportFactionByHofRankToSql } = require('./src/controllers/player-stats-export-controller.js');
+const { exportFactionByHofRankToSql } = require('./src/controllers/player-stats-csv-controller.js');
 const { printSuccess, printError } = require('./src/views/cli-output-view.js');
 
 function asPositiveInt(value) {

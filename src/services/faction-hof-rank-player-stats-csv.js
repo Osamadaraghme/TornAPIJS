@@ -192,8 +192,6 @@ async function getFactionPlayersByHofRankToSql(factionHofRank, options = {}) {
 
         const row = buildPlayerStatsCsvRow(stats, {
             requestedFactionHofRank: rank,
-            sourceFactionId: faction.factionId,
-            sourceFactionName: factionName ?? faction.factionName ?? null,
         });
 
         const appendRes = appendSqlRow(sqlPath, CSV_HEADERS, row);

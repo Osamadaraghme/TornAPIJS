@@ -1,15 +1,15 @@
-﻿/**
+/**
  * Run from project folder:
  *   PowerShell: node run-active-ranked.js
  *
  * Optional args: ACTIVE_HOURS MIN_ID MAX_ID MAX_TRIES PERIOD TIER HAS_FACTION HAS_COMPANY [MIN_LEVEL] [SQL_PATH]
- * (PERIOD is ignored for scoring; service always uses monthly xanax delta â€” pass `month` to match examples.)
+ * (PERIOD is ignored for scoring; service always uses monthly xanax delta — pass `month` to match examples.)
  * Example:
  *   node run-active-ranked.js 24 1 3000000 120 month ALL ANY ANY
  *   node run-active-ranked.js 24 1 3000000 120 month B N ANY 20
  */
 
-const { exportRandomActivePlayerToSql } = require('./src/controllers/player-stats-export-controller.js');
+const { exportRandomActivePlayerToSql } = require('./src/controllers/player-stats-csv-controller.js');
 const { printSuccess, printError } = require('./src/views/cli-output-view.js');
 
 const apiKey = process.env.TORN_API_KEY; // optional override; static pool is used when unset

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Run from project folder:
  *   PowerShell: node run-active-ranked-by-id-csv.js PLAYER_ID [SQL_PATH]
  *
@@ -6,7 +6,7 @@
  * Default path under ./exports/ or set `TORN_STATS_SQL` / `TORN_BY_ID_STATS_SQL`.
  */
 
-const { exportPlayerByIdToSql } = require('./src/controllers/player-stats-export-controller.js');
+const { exportPlayerByIdToSql } = require('./src/controllers/player-stats-csv-controller.js');
 const { printSuccess, printError } = require('./src/views/cli-output-view.js');
 
 const playerId = process.argv[2];
