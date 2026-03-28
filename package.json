@@ -1,6 +1,6 @@
 {
   "name": "tornapijs",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "description": "Torn recruitment helpers with optional web UI",
   "scripts": {

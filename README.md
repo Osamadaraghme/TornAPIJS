@@ -2,6 +2,8 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
+**Current version:** **2.3.0** (see `package.json` and `RELEASE_NOTES.md`).
+
 All public APIs append `INSERT` rows to `.sql` files (create if missing, append if they exist). New files include comment lines that list every column name in the same order as the model (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
 ## Architecture (MVC + services)
@@ -62,13 +64,24 @@ The UI uses the same export controllers as the CLI. Pages:
 |------|---------|
 | `/` | Home with shortcuts and a list of current `.sql` files in `exports/` |
 | `/api/random` | Random active ranked (form submits to append one `INSERT`) |
-| `/api/by-id` | Player by ID |
+| `/api/by-id` | Player by ID (optional query `?playerId=` or `?q=` pre-fills the ID field) |
 | `/api/faction-hof` | Faction HoF rank export |
 | `/exports` | Index of all `exports/*.sql` files (dynamic) |
 | `/exports/view/<file>.sql` | Read-only view of one export file (time played columns show days & hours; SQL still stores seconds) |
 | `/readme` | This documentation rendered from `README.md` |
 | `/release-notes` | Changelog rendered from `RELEASE_NOTES.md` |
 | `/about` | Short bio / credits for the author |
+
+**Navigation**
+
+- **Quick go** (search box in the header): filter pages by name; **Ctrl+K** / **Cmd+K** or **`/`** (when not typing in a form field) focuses it. Type part of a page name or choose from the list; **Enter** opens the highlighted row.
+- **Numeric shortcut:** digits only (e.g. `3225726`) offers **Player by ID — …** and opens `/api/by-id?playerId=…` with that ID filled in.
+- **API results:** after Random / By ID / Faction HoF runs, **Search again** returns to the same form (above the JSON block).
+
+**Export table links**
+
+- **Player name**, **player ID**, and column headers link to Torn profiles (`profiles.php?XID=…`).
+- **Faction** and **company** names link to Torn when the row includes **`factionId`** and **`companyId`** (written on new exports from v2.3.0). Older `.sql` files without those columns show plain text until you re-append rows or rewrite the file (e.g. after a row delete, the web UI normalizes to the current schema with `NULL` for missing IDs).
 
 Set `TORN_API_KEY` in the environment if you are not using the default key pool.
 
@@ -170,6 +183,7 @@ Optional: `node run-faction-hof-rank-csv.js HOF_RANK [SQL_PATH] [MAX_PLAYERS]` w
   - by-id API: `./exports/active-ranked-player-by-id-stats.sql`
   - faction HoF API: `./exports/faction-hof-rank-player-stats.sql`
 - New files start with a sentinel line and comments listing all column headers, then multi-line `INSERT INTO "player_stats" (...)` / `VALUES (...)` blocks (one row per statement). String fields are HTML-entity decoded before quoting (e.g. `&#039;` becomes a normal apostrophe). Table name is `player_stats` (see `src/utils/sql-append.js`).
+- Player rows include **`factionId`** and **`companyId`** (alongside **`factionName`** / **`companyName`**) so the web viewer can link to Torn’s faction and company pages. Those two ID columns are hidden in the transposed table to keep the recruiter view tidy.
 - Override path per call with CLI `[SQL_PATH]`, or `options.sqlPath` / `options.csvPath` (legacy alias) in code.
 - Env overrides per API: `TORN_RANDOM_STATS_SQL`, `TORN_BY_ID_STATS_SQL`, `TORN_FACTION_HOF_STATS_SQL`. Legacy `*_CSV` and `TORN_STATS_CSV` env names are still read as fallbacks.
 - Global fallback: `TORN_STATS_SQL` or `TORN_STATS_CSV`.

@@ -147,6 +147,11 @@ async function getActiveRankedPlayerById(playerId) {
         ? await fetchCompanyName(result._companyId, apiKey, counter)
         : null);
 
+    result.factionId = result._factionId != null ? Number(result._factionId) : null;
+    result.companyId = result._companyId != null ? Number(result._companyId) : null;
+    if (result.factionId != null && !Number.isFinite(result.factionId)) result.factionId = null;
+    if (result.companyId != null && !Number.isFinite(result.companyId)) result.companyId = null;
+
     delete result._factionId;
     delete result._factionNameFromProfile;
     delete result._companyId;
