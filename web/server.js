@@ -22,6 +22,12 @@ const {
     DEFAULT_TABLE_NAME,
 } = require(path.join(__dirname, '..', 'src', 'utils', 'sql-append.js'));
 const { CSV_HEADERS } = require(path.join(__dirname, '..', 'src', 'models', 'player-stats-csv-model.js'));
+const {
+    XANAX_PER_DAY_FOR_FULL_SCORE,
+    HOURS_PER_DAY_FOR_FULL_TIME_SCORE,
+    RECRUITMENT_TIER_XAN_WEIGHT,
+    RECRUITMENT_TIER_TIME_WEIGHT,
+} = require(path.join(__dirname, '..', 'src', 'constants.js'));
 
 const ROOT = path.join(__dirname, '..');
 const EXPORTS_DIR = path.join(ROOT, 'exports');
@@ -30,7 +36,7 @@ const PORT = Number(process.env.TORN_WEB_PORT || 3847);
 /** Shown in export SQL but omitted from the transposed table (used only for name links). */
 const EXPORT_VIEW_HIDDEN_COLUMNS = new Set(['factionId', 'companyId']);
 
-/** Field order in export table view: recruiter-first, `recordedAt` last. */
+/** Field order in export table view: recruiter-first; `recordedAt` above `level` (shown as GMT). */
 const RECRUITER_FIELD_ORDER = [
     'name',
     'playerId',
@@ -40,6 +46,7 @@ const RECRUITER_FIELD_ORDER = [
     'averageTimeScore',
     'avgXanaxPerDay',
     'avgTimePlayedHoursPerDay',
+    'recordedAt',
     'level',
     'hoursSinceLastAction',
     'factionName',
@@ -60,11 +67,10 @@ const RECRUITER_FIELD_ORDER = [
     'periodUsed',
     'xanaxMode',
     'tornApiCallsUsed',
-    'recordedAt',
 ];
 
 const FIELD_LABELS = {
-    recordedAt: 'Recorded at',
+    recordedAt: 'Recorded at (GMT)',
     requestedFactionHofRank: 'Requested HoF rank',
     name: 'Player name',
     playerId: 'Player ID',
@@ -101,6 +107,19 @@ const TIME_PLAYED_SECONDS_COLUMNS = new Set([
     'timePlayedUntilLastMonth',
     'timePlayedDuringLastMonth',
 ]);
+
+/** Hover `title` text for score columns (matches `src/utils/scoring.js` + `constants.js`). */
+const SCORE_FORMULA_TOOLTIP = {
+    xanScore:
+        `Xan score (0–100): min(avg Xanax per day ÷ ${XANAX_PER_DAY_FOR_FULL_SCORE}, 1) × 100. `
+        + `${XANAX_PER_DAY_FOR_FULL_SCORE} Xanax/day average ⇒ 100%.`,
+    averageTimeScore:
+        `Time score (0–100): min(avg hours played per day ÷ ${HOURS_PER_DAY_FOR_FULL_TIME_SCORE}, 1) × 100, `
+        + `from the last-month timeplayed window. ${HOURS_PER_DAY_FOR_FULL_TIME_SCORE} h/day average ⇒ 100%.`,
+    combinedScore:
+        `Combined (0–100): ${RECRUITMENT_TIER_XAN_WEIGHT * 100}% × (xan score) + ${RECRUITMENT_TIER_TIME_WEIGHT * 100}% × (time score). `
+        + `Both inputs are the 0–100 values in this row. Tier uses combined score.`,
+};
 
 function escapeHtml(s) {
     return String(s)
@@ -199,9 +218,7 @@ function orderColumnsForRecruiterView(columns) {
     const knownOrdered = RECRUITER_FIELD_ORDER.filter((f) => colSet.has(f));
     const knownSet = new Set(knownOrdered);
     const extras = columns.filter((c) => !knownSet.has(c));
-    const withoutRecorded = knownOrdered.filter((c) => c !== 'recordedAt');
-    const hasRecordedAt = colSet.has('recordedAt');
-    return [...withoutRecorded, ...extras.filter((e) => e !== 'recordedAt'), ...(hasRecordedAt ? ['recordedAt'] : [])];
+    return [...knownOrdered, ...extras];
 }
 
 function fieldLabelForColumn(col) {
@@ -281,6 +298,33 @@ function formatSecondsAsDaysHoursHtml(rawSeconds) {
     return `<span class="cell-str cell-duration" title="${escapeHtml(String(s))} seconds total">${escapeHtml(label)}</span>`;
 }
 
+const UTC_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const UTC_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** ISO / SQL datetime string → human line in GMT; tooltip keeps original value. */
+function formatRecordedAtHtml(raw) {
+    if (raw === null || raw === undefined) {
+        return '<span class="cell-null">NULL</span>';
+    }
+    const s = String(raw).trim();
+    if (!s) {
+        return '<span class="cell-null">NULL</span>';
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) {
+        return formatTableCell(raw);
+    }
+    const wk = UTC_WEEKDAYS[d.getUTCDay()];
+    const mon = UTC_MONTHS[d.getUTCMonth()];
+    const day = d.getUTCDate();
+    const y = d.getUTCFullYear();
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    const ss = String(d.getUTCSeconds()).padStart(2, '0');
+    const human = `${wk}, ${day} ${mon} ${y}, ${hh}:${mm}:${ss} GMT`;
+    return `<span class="cell-str cell-recorded-at" title="${escapeHtml(s)}">${escapeHtml(human)}</span>`;
+}
+
 function formatTableCell(value) {
     if (value === null || value === undefined) {
         return '<span class="cell-null">NULL</span>';
@@ -304,6 +348,9 @@ function formatTableCell(value) {
 
 function formatTransposedDataCell(col, row) {
     const v = row[col];
+    if (col === 'recordedAt') {
+        return formatRecordedAtHtml(v);
+    }
     if (TIME_PLAYED_SECONDS_COLUMNS.has(col)) {
         return formatSecondsAsDaysHoursHtml(v);
     }
@@ -332,6 +379,10 @@ function formatTransposedDataCell(col, row) {
         if (companyUrl && hasLabel) {
             return `<a class="cell-link" href="${escapeHtml(companyUrl)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
         }
+    }
+    const scoreTip = SCORE_FORMULA_TOOLTIP[col];
+    if (scoreTip) {
+        return `<span class="cell-score-formula" title="${escapeHtml(scoreTip)}">${inner}</span>`;
     }
     return inner;
 }
@@ -451,6 +502,7 @@ app.get('/release-notes', async (req, res) => {
     }
 });
 
+// /about copy is author-owned; keep this wording unless Botato asks to change it.
 app.get('/about', (req, res) => {
     const tornProfile = 'https://www.torn.com/profiles.php?XID=3961724';
     const body = `
@@ -458,7 +510,7 @@ app.get('/about', (req, res) => {
   <h1>About</h1>
   <p class="about-lead">Hi — I’m <strong>Botato</strong> (<a href="${escapeHtml(tornProfile)}" target="_blank" rel="noopener noreferrer">Torn ID 3961724</a>). These days I’m a programmer who spends far too much time in <strong>Torn City</strong> (former teacher — the classroom chapter is closed).</p>
   <p>This little site is a set of scripts I use for recruitment and stats: nothing fancy, just tools that talk to Torn’s API and land tidy SQL exports. If you’re here, you probably care about factions, numbers, or both — same here.</p>
-  <p>In-game I’m a <strong>merit whore</strong> in the best/worst sense: I’m chasing every award I can, and I’m trying to pop as much Xanax as I can while I’m at it. I don’t really do Xanax jokes — I care about the grind, not the punchlines. When I’m not up against API limits, I’m usually tweaking a formula or losing an argument with a linter.</p>
+  <p>In-game I’m a <strong>merit whore</strong> in the best/worst sense: I’m chasing every award I can, and I’m trying to pop as much Xanax as I can while I’m at it. When I’m not up against API limits, I’m usually tweaking an algorithm on how to get all the awards faster.</p>
   <p class="about-footer muted">Thanks for stopping by. Good luck in the city.</p>
 </div>`;
     res.type('html').send(layout('About', 'about', body));

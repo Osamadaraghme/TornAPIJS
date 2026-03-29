@@ -590,6 +590,17 @@ body.page-md-doc main {
   border-bottom: 1px dotted rgba(139, 156, 179, 0.4);
 }
 
+.export-table .cell-score-formula {
+  cursor: help;
+  border-bottom: 1px dotted rgba(139, 156, 179, 0.4);
+}
+
+.export-table .cell-recorded-at {
+  cursor: help;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .export-table .cell-nice {
   font-style: italic;
   font-weight: 600;
