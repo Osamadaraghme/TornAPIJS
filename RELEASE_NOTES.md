@@ -11,6 +11,7 @@
 - **Ranked war stats (informational, not scored):** v2 `personalstats` now also requests **`rankedwarhits`** (same two-call monthly snapshot as xanax/time). New export / response fields: **`allTimeRankedWarHits`**, **`rankedWarHitsDuringLastMonth`**. **Not used in tier** or `combinedScore`.
 - **Ranked wars participated (last month):** when the player has a **`factionId`**, one additional **`GET /faction/{id}?selections=rankedwars,basic`** counts ranked wars whose timeline overlaps the rolling last-month window and where **`days_in_faction`** implies the member had joined before the war ended (join estimated from `now − days_in_faction × 86400`). Field: **`rankedWarsParticipatedLastMonth`**. **Not used in tier.** Faction API returns at most the last **100** ranked wars; if the member row is missing, the count is **`null`**.
 - **Web — Copy JSON:** success pages for **Random ranked**, **Player by ID**, and **Faction HoF** show a **Copy JSON** control above the formatted JSON block (`web/server.js`, `web/public/site.js`, `web/public/style.css`). Uses the Clipboard API with a `textarea` fallback.
+- **Web — Copy JSON (saved player data viewer):** on `/exports/view/<file>.sql`, each transposed **player column** header includes **Copy JSON**, copying that row as pretty-printed JSON (row data embedded once in the page; same clipboard behavior as API pages).
 
 ### Notes
 

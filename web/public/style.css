@@ -409,6 +409,16 @@ body.page-export-sql main {
   margin: 0;
 }
 
+.export-table-transposed .th-record .btn-copy-player-json {
+  margin-top: 0.35rem;
+  margin-bottom: 0.25rem;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.72rem;
+}
+.export-table-transposed .th-record .btn-copy-player-json.btn-copy-player-json--done {
+  background: #2d6a4f;
+}
+
 .export-table-transposed .btn-delete {
   display: inline-block;
   margin: 0;

@@ -139,6 +139,11 @@ function escapeHtml(s) {
         .replace(/"/g, '&quot;');
 }
 
+/** JSON safe to embed inside `<script type="application/json">` (breaks `</script>` if raw `<` is allowed). */
+function jsonForInlineScriptTag(value) {
+    return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
 /**
  * `marked` does not emit heading `id`s; GitHub README links use github-slugger rules.
  * Inject matching ids so `#fragment` links work on `/readme` and `/release-notes`.
@@ -441,6 +446,7 @@ function renderPlayerStatsTable(parsed, sqlBasename, options = {}) {
         headerCells.push(`<th scope="col" class="th-record">
   ${checkboxBlock}
   <div class="th-record-top">${idBlock}${nameBlock}</div>
+  <button type="button" class="btn btn-copy-player-json" data-player-row="${i}" title="Copy this player row as JSON" aria-label="Copy row ${i + 1} as JSON">Copy JSON</button>
   <form class="form-delete-row" method="post" action="${escapeHtml(deleteAction)}" onsubmit="return confirm('Remove this row from the SQL file?');">
     <input type="hidden" name="rowIndex" value="${i}"/>
     <button type="submit" class="btn-delete">Delete</button>
@@ -460,12 +466,14 @@ function renderPlayerStatsTable(parsed, sqlBasename, options = {}) {
             return `<tr>${fieldCell}${cells}</tr>`;
         })
         .join('');
+    const rowsJson = jsonForInlineScriptTag(rows);
     return `<div class="table-scroll table-scroll-transposed" role="region" aria-label="Export data" tabindex="0">
 <table class="export-table export-table-transposed">
 <thead><tr>${headerCells.join('')}</tr></thead>
 <tbody>${bodyRows}</tbody>
 </table>
-</div>`;
+</div>
+<script type="application/json" id="export-view-rows-json">${rowsJson}</script>`;
 }
 
 async function listSqlBasenames() {

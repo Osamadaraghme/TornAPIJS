@@ -23,7 +23,7 @@ HTTP requests from this project use **`https://api.torn.com`** (see `API_BASE` i
 
 The browser UI uses the same controllers as the CLI. **Default URL:** [`http://localhost:3847`](http://localhost:3847) (override with env **`TORN_WEB_PORT`**). With the server running, append any path below (e.g. [`http://localhost:3847/api/by-id`](http://localhost:3847/api/by-id)).
 
-After a successful **Random ranked**, **Player by ID**, or **Faction HoF** run, the HTML result includes **Copy JSON** — one click copies the pretty-printed response (no manual select-all).
+After a successful **Random ranked**, **Player by ID**, or **Faction HoF** run, the HTML result includes **Copy JSON** — one click copies the pretty-printed response (no manual select-all). On **Saved player data** file viewers (`/exports/view/…`), each player column has **Copy JSON** for that row’s object.
 
 ### Setup and run
 
@@ -77,6 +77,7 @@ Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`)
 
 ### Export table (viewer)
 
+- **Copy JSON** appears in each player column header; it copies that record as formatted JSON (same shape as one element of the saved `rows` array).
 - **Player name**, **player ID**, and column headers link to Torn profiles — pattern [`https://www.torn.com/profiles.php?XID={id}`](https://www.torn.com/profiles.php?XID=1).
 - **Faction** and **company** names link when the row has **`factionId`** and **`companyId`** (new exports from v2.3.0): [`factions.php?step=profile&ID=…`](https://www.torn.com/factions.php?step=profile&ID=1), [`companies.php?ID=…`](https://www.torn.com/companies.php?ID=1). Older `.sql` files without those columns show plain text until you append new rows or normalize the file (e.g. row delete in the viewer fills missing columns with `NULL`).
 

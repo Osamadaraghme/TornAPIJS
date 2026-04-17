@@ -175,30 +175,24 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
 })();
 
 /**
- * Copy formatted API result JSON (Random / By ID / Faction HoF) without selecting the <pre>.
+ * Copy JSON to clipboard with button feedback (API result cards + export viewer per-player rows).
  */
 (function () {
-    document.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.btn-copy-json');
-        if (!btn) return;
-        const card = btn.closest('.api-json-card');
-        const pre = card?.querySelector('.api-json-pre');
-        if (!pre) return;
-        const text = pre.textContent ?? '';
-        const orig = btn.textContent;
+    async function copyPlainTextWithButtonFeedback(button, text, doneClass) {
+        const orig = button.textContent;
         const restore = () => {
-            btn.textContent = orig;
-            btn.classList.remove('btn-copy-json--done');
-            btn.disabled = false;
+            button.textContent = orig;
+            button.classList.remove(doneClass);
+            button.disabled = false;
         };
         const ok = () => {
-            btn.textContent = 'Copied!';
-            btn.classList.add('btn-copy-json--done');
-            btn.disabled = true;
+            button.textContent = 'Copied!';
+            button.classList.add(doneClass);
+            button.disabled = true;
             setTimeout(restore, 2000);
         };
         const fail = () => {
-            btn.textContent = 'Copy failed';
+            button.textContent = 'Copy failed';
             setTimeout(restore, 2500);
         };
 
@@ -220,6 +214,33 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
             } catch {
                 fail();
             }
+        }
+    }
+
+    document.addEventListener('click', async (e) => {
+        const apiBtn = e.target.closest('.btn-copy-json');
+        if (apiBtn) {
+            const card = apiBtn.closest('.api-json-card');
+            const pre = card?.querySelector('.api-json-pre');
+            if (!pre) return;
+            await copyPlainTextWithButtonFeedback(apiBtn, pre.textContent ?? '', 'btn-copy-json--done');
+            return;
+        }
+        const playerBtn = e.target.closest('.btn-copy-player-json');
+        if (playerBtn) {
+            const script = document.getElementById('export-view-rows-json');
+            if (!script?.textContent) return;
+            let rows;
+            try {
+                rows = JSON.parse(script.textContent);
+            } catch {
+                return;
+            }
+            if (!Array.isArray(rows)) return;
+            const idx = Number(playerBtn.getAttribute('data-player-row'));
+            if (!Number.isInteger(idx) || idx < 0 || idx >= rows.length) return;
+            const text = JSON.stringify(rows[idx], null, 2);
+            await copyPlainTextWithButtonFeedback(playerBtn, text, 'btn-copy-player-json--done');
         }
     });
 })();
