@@ -8,7 +8,7 @@
         { href: '/api/random', label: 'Random ranked', keywords: 'random active roll lottery' },
         { href: '/api/by-id', label: 'Player by ID', keywords: 'by id player lookup profile xid' },
         { href: '/api/faction-hof', label: 'Faction HoF', keywords: 'hof hall fame faction rank' },
-        { href: '/exports', label: 'SQL exports', keywords: 'files browse sql export' },
+        { href: '/exports', label: 'Saved player data', keywords: 'files browse sql export saved player data delete' },
         { href: '/readme', label: 'README', keywords: 'docs readme documentation' },
         { href: '/release-notes', label: 'Release notes', keywords: 'changelog releases version' },
         { href: '/about', label: 'About', keywords: 'botato author' },

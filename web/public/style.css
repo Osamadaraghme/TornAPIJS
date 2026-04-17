@@ -621,3 +621,115 @@ body.page-md-doc main {
   margin-top: 1.5rem;
   font-size: 0.9rem;
 }
+
+/* Saved player data list (/, /exports) */
+.saved-data-intro {
+  margin: 0 0 0.85rem;
+}
+.saved-data-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.saved-data-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  background: rgba(15, 20, 28, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.saved-data-row:hover {
+  border-color: var(--accent);
+  background: rgba(61, 139, 253, 0.08);
+}
+.saved-data-link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0;
+  color: var(--text);
+  text-decoration: none;
+}
+.saved-data-link:hover {
+  text-decoration: none;
+}
+.saved-data-link:hover .saved-data-name {
+  color: var(--accent);
+}
+.saved-data-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-data-ext {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: rgba(45, 58, 77, 0.5);
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.saved-data-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.saved-data-meta .sep {
+  margin: 0 0.2rem;
+  opacity: 0.6;
+}
+.saved-data-delete-form {
+  margin: 0;
+  flex-shrink: 0;
+}
+.btn-danger {
+  display: inline-block;
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid rgba(240, 102, 102, 0.65);
+  background: rgba(240, 102, 102, 0.12);
+  color: #ff9a9a;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.btn-danger:hover {
+  background: var(--err);
+  border-color: var(--err);
+  color: #fff;
+  filter: none;
+}
+.saved-empty {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  background: rgba(15, 20, 28, 0.5);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+@media (max-width: 600px) {
+  .saved-data-row {
+    flex-wrap: wrap;
+  }
+  .saved-data-meta {
+    order: 3;
+    flex-basis: 100%;
+  }
+}

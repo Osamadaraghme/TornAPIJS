@@ -165,7 +165,7 @@ function nav(active) {
         ['/api/random', 'Random ranked', 'random'],
         ['/api/by-id', 'Player by ID', 'byid'],
         ['/api/faction-hof', 'Faction HoF', 'hof'],
-        ['/exports', 'SQL exports', 'exports'],
+        ['/exports', 'Saved player data', 'exports'],
         ['/readme', 'README', 'readme'],
         ['/release-notes', 'Release notes', 'releases'],
         ['/about', 'About', 'about'],
@@ -450,6 +450,79 @@ async function listSqlBasenames() {
     }
 }
 
+/** Same files as `listSqlBasenames`, with size + mtime for the listing UI. */
+async function listSqlExportEntries() {
+    const names = await listSqlBasenames();
+    const entries = await Promise.all(
+        names.map(async (name) => {
+            try {
+                const st = await fsp.stat(path.join(EXPORTS_DIR, name));
+                return { name, sizeBytes: st.size, mtimeMs: st.mtimeMs };
+            } catch {
+                return { name, sizeBytes: 0, mtimeMs: 0 };
+            }
+        }),
+    );
+    return entries;
+}
+
+/** Friendly human label for a saved file (drops `.sql`, replaces `-`/`_` with spaces). */
+function humanizeSqlFileName(name) {
+    const base = name.replace(/\.sql$/i, '');
+    return base.replace(/[-_]+/g, ' ').trim() || base;
+}
+
+function formatBytes(n) {
+    if (!Number.isFinite(n) || n < 0) return '';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function formatRelativeTime(mtimeMs) {
+    if (!Number.isFinite(mtimeMs) || mtimeMs <= 0) return '';
+    const diffSec = Math.max(0, (Date.now() - mtimeMs) / 1000);
+    if (diffSec < 60) return 'just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} h ago`;
+    if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)} day(s) ago`;
+    const d = new Date(mtimeMs);
+    return d.toISOString().slice(0, 10);
+}
+
+/** Render the "saved player data" file list as cards (used by `/` and `/exports`). */
+function renderSavedDataList(entries, options = {}) {
+    const { compact = false } = options;
+    if (!entries.length) {
+        return '<p class="saved-empty">No saved player data files yet. Run an API to create one.</p>';
+    }
+    return `<ul class="saved-data-list">${entries
+        .map((e) => {
+            const enc = encodeURIComponent(e.name);
+            const human = humanizeSqlFileName(e.name);
+            const meta = compact
+                ? ''
+                : `<span class="saved-data-meta">${escapeHtml(formatRelativeTime(e.mtimeMs))}`
+                + ` <span class="sep">·</span> ${escapeHtml(formatBytes(e.sizeBytes))}</span>`;
+            const deleteBtn = compact
+                ? ''
+                : `<form method="post" action="/exports/delete/${enc}" class="saved-data-delete-form"
+                       onsubmit="return confirm('Delete &quot;${escapeHtml(e.name).replace(/'/g, "\\'")}&quot;? This cannot be undone.');">
+                       <button type="submit" class="btn-danger" aria-label="Delete ${escapeHtml(e.name)}">Delete</button>
+                   </form>`;
+            return `<li class="saved-data-row">
+                <a class="saved-data-link" href="/exports/view/${enc}">
+                    <span class="saved-data-name">${escapeHtml(human)}</span>
+                    <span class="saved-data-ext">${escapeHtml(e.name)}</span>
+                </a>
+                ${meta}
+                ${deleteBtn}
+            </li>`;
+        })
+        .join('')}</ul>`;
+}
+
 function safeSqlBasename(raw) {
     if (raw == null || typeof raw !== 'string') return null;
     const base = path.basename(raw);
@@ -543,34 +616,60 @@ app.get('/about', (req, res) => {
 });
 
 app.get('/', async (req, res) => {
-    const files = await listSqlBasenames();
-    const exportLinks = files.length
-        ? `<ul>${files.map((f) => `<li><a href="/exports/view/${encodeURIComponent(f)}">${escapeHtml(f)}</a></li>`).join('')}</ul>`
-        : '<p class="msg-ok">No <code>.sql</code> files yet. Run an API to create exports under <code>exports/</code>.</p>';
+    const entries = await listSqlExportEntries();
+    const list = renderSavedDataList(entries, { compact: true });
     const body = `
 <h1>Home</h1>
 <div class="card">
   <p>Docs: <a href="/readme">README</a> · <a href="/release-notes">Release notes</a> · <a href="/about">About</a></p>
-  <p>Run the three recruitment APIs from their pages. Export files appear under <code>exports/</code>.</p>
+  <p>Run the three recruitment APIs from their pages. Saved player data appears under <a href="/exports">Saved player data</a>.</p>
   <p><a class="btn" href="/api/random">Random active ranked</a>
   <a class="btn" href="/api/by-id">Player by ID</a>
   <a class="btn" href="/api/faction-hof">Faction HoF</a></p>
 </div>
 <div class="card">
-  <h2>SQL export files</h2>
-  <p><a href="/exports">Browse all exports</a></p>
-  ${exportLinks}
+  <h2>Saved player data</h2>
+  <p><a href="/exports">Open the full list (with delete)</a></p>
+  ${list}
 </div>`;
     res.type('html').send(layout("Botato's Torn Scripts", 'home', body));
 });
 
 app.get('/exports', async (req, res) => {
-    const files = await listSqlBasenames();
-    const list = files.length
-        ? `<ul>${files.map((f) => `<li><a href="/exports/view/${encodeURIComponent(f)}">${escapeHtml(f)}</a></li>`).join('')}</ul>`
-        : '<p>No <code>.sql</code> files in <code>exports/</code>.</p>';
-    const body = `<h1>SQL exports</h1><div class="card">${list}</div>`;
-    res.type('html').send(layout('SQL exports', 'exports', body));
+    const entries = await listSqlExportEntries();
+    const flash = req.query.deleted ? `<p class="msg-ok">Deleted <code>${escapeHtml(String(req.query.deleted))}</code>.</p>` : '';
+    const list = renderSavedDataList(entries);
+    const body = `
+<h1>Saved player data</h1>
+${flash}
+<div class="card">
+  <p class="muted saved-data-intro">Each row is one of your saved player-data files. Click the name to open it, or use <strong>Delete</strong> to remove the file.</p>
+  ${list}
+</div>`;
+    res.type('html').send(layout('Saved player data', 'exports', body));
+});
+
+app.post('/exports/delete/:file', async (req, res) => {
+    const base = safeSqlBasename(req.params.file);
+    if (!base) {
+        res.status(400).type('html').send(layout('Bad file', 'exports', '<p class="msg-err">Invalid file name.</p>'));
+        return;
+    }
+    const full = resolvedExportPath(base);
+    if (!full) {
+        res.status(400).type('html').send(layout('Bad file', 'exports', '<p class="msg-err">Invalid file path.</p>'));
+        return;
+    }
+    try {
+        await fsp.unlink(full);
+    } catch (err) {
+        if (err && err.code !== 'ENOENT') {
+            const msg = `Could not delete <code>${escapeHtml(base)}</code>: ${escapeHtml(err.message || String(err))}`;
+            res.status(500).type('html').send(layout('Delete failed', 'exports', `<p class="msg-err">${msg}</p>`));
+            return;
+        }
+    }
+    res.redirect(303, `/exports?deleted=${encodeURIComponent(base)}`);
 });
 
 app.post('/exports/view/:file/delete-row', async (req, res) => {
