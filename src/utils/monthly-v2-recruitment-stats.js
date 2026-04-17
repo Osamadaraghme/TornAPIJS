@@ -1,5 +1,5 @@
 /**
- * Torn v2 personalstats: xantaken + exttaken (ecstasy) + timeplayed (monthly deltas) + activestreak (current).
+ * Torn v2 personalstats: xantaken + exttaken + rankedwarhits + timeplayed (monthly deltas) + activestreak (current).
  * Two requests: all-time snapshot with streak, then the same drug/time totals at month-ago timestamp.
  */
 
@@ -33,7 +33,7 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
 
     const all = await fetchUserPersonalStatsV2(
         playerId,
-        'xantaken,exttaken,timeplayed,activestreak',
+        'xantaken,exttaken,rankedwarhits,timeplayed,activestreak',
         apiKey,
         counter,
     );
@@ -41,7 +41,7 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
 
     const hist = await fetchUserPersonalStatsV2(
         playerId,
-        'xantaken,exttaken,timeplayed',
+        'xantaken,exttaken,rankedwarhits,timeplayed',
         apiKey,
         counter,
         monthAgoTimestamp,
@@ -62,6 +62,13 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
         ecstasyTakenDuringLastMonth = Math.max(0, allTimeEcstasyTaken - ecstasyTakenUntilLastMonth);
     }
 
+    const allTimeRankedWarHits = toFiniteNumber(all.values?.rankedwarhits);
+    const rankedWarHitsUntilLastMonth = toFiniteNumber(hist.values?.rankedwarhits);
+    let rankedWarHitsDuringLastMonth = null;
+    if (allTimeRankedWarHits != null && rankedWarHitsUntilLastMonth != null) {
+        rankedWarHitsDuringLastMonth = Math.max(0, allTimeRankedWarHits - rankedWarHitsUntilLastMonth);
+    }
+
     const allTimeTimePlayed = toFiniteNumber(all.values?.timeplayed);
     const timePlayedUntilLastMonth = toFiniteNumber(hist.values?.timeplayed);
     let timePlayedDuringLastMonth = null;
@@ -78,6 +85,9 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
         allTimeEcstasyTaken,
         ecstasyTakenUntilLastMonth,
         ecstasyTakenDuringLastMonth,
+        allTimeRankedWarHits,
+        rankedWarHitsUntilLastMonth,
+        rankedWarHitsDuringLastMonth,
         allTimeTimePlayed,
         timePlayedUntilLastMonth,
         timePlayedDuringLastMonth,

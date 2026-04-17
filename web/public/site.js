@@ -173,3 +173,53 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
         }
     });
 })();
+
+/**
+ * Copy formatted API result JSON (Random / By ID / Faction HoF) without selecting the <pre>.
+ */
+(function () {
+    document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-copy-json');
+        if (!btn) return;
+        const card = btn.closest('.api-json-card');
+        const pre = card?.querySelector('.api-json-pre');
+        if (!pre) return;
+        const text = pre.textContent ?? '';
+        const orig = btn.textContent;
+        const restore = () => {
+            btn.textContent = orig;
+            btn.classList.remove('btn-copy-json--done');
+            btn.disabled = false;
+        };
+        const ok = () => {
+            btn.textContent = 'Copied!';
+            btn.classList.add('btn-copy-json--done');
+            btn.disabled = true;
+            setTimeout(restore, 2000);
+        };
+        const fail = () => {
+            btn.textContent = 'Copy failed';
+            setTimeout(restore, 2500);
+        };
+
+        try {
+            await navigator.clipboard.writeText(text);
+            ok();
+        } catch {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                ok();
+            } catch {
+                fail();
+            }
+        }
+    });
+})();

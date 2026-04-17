@@ -2,7 +2,7 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
-**Version:** **2.3.0** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)).
+**Version:** **2.3.2** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)).
 
 Exports append `INSERT` rows to `.sql` files under `exports/` (created if missing). New files list every column in model order (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
@@ -22,6 +22,8 @@ HTTP requests from this project use **`https://api.torn.com`** (see `API_BASE` i
 ## Web UI
 
 The browser UI uses the same controllers as the CLI. **Default URL:** [`http://localhost:3847`](http://localhost:3847) (override with env **`TORN_WEB_PORT`**). With the server running, append any path below (e.g. [`http://localhost:3847/api/by-id`](http://localhost:3847/api/by-id)).
+
+After a successful **Random ranked**, **Player by ID**, or **Faction HoF** run, the HTML result includes **Copy JSON** — one click copies the pretty-printed response (no manual select-all).
 
 ### Setup and run
 
@@ -282,15 +284,18 @@ Tier bands use **`combinedScore`** (same table as in [Random active ranked](#cli
 ### Other (v2.2.0)
 
 - **`activestreak`** from the same [v2 `personalstats`](https://www.torn.com/swagger.php) batch (not used in tier).
-- Two v2 **`GET /v2/user/{userId}/personalstats`** calls per player (all-time batch + month-ago batch); see [Swagger](https://www.torn.com/swagger.php) for parameters (`stat`, `timestamp`, etc.).
+- Two v2 **`GET /v2/user/{userId}/personalstats`** calls per player (all-time batch + month-ago batch); see [Swagger](https://www.torn.com/swagger.php) for parameters (`stat`, `timestamp`, etc.). When the player has a **`factionId`**, one additional **`GET /faction/{id}?selections=rankedwars,basic`** is used for **`rankedWarsParticipatedLastMonth`** (not used in tier).
 
 ---
 
 ## Notes on xanax and timeplayed windows
 
 - **Xanax:** `xanaxTakenDuringLastMonth = allTimeXanaxTaken - xanaxTakenUntilLastMonth`.
+- **Ecstasy (informational):** `ecstasyTakenDuringLastMonth = allTimeEcstasyTaken - value(exttaken)` at “one month ago”. Not used in tier or combined score.
+- **Ranked war hits:** cumulative **`rankedwarhits`** from the same two v2 `personalstats` snapshots → `allTimeRankedWarHits` and `rankedWarHitsDuringLastMonth` (delta). Not used in tier.
+- **Ranked wars participated (last month):** one extra **`GET /faction/{id}?selections=rankedwars,basic`** per player when they have a faction. Wars whose timeline overlaps the rolling last-month window are counted only if the member’s **`days_in_faction`** implies they had already joined before the war ended (join time estimated as `now − days_in_faction × 86400`). **Not used in tier.**
 - **Time played:** same idea for **`timeplayed`** seconds → `timePlayedDuringLastMonth`, plus all-time / until-last-month columns.
-- Exports include xanax fields, time fields, **`averageTimeScore`**, **`combinedScore`**, **`activeStreak`**, **`avgXanaxPerDay`**.
+- Exports include xanax, ecstasy, ranked-war fields, time fields, **`averageTimeScore`**, **`combinedScore`**, **`activeStreak`**, **`avgXanaxPerDay`**.
 
 ---
 
@@ -301,7 +306,7 @@ Tier bands use **`combinedScore`** (same table as in [Random active ranked](#cli
 - `src/views/` — CLI formatting.
 - `src/services/` — Torn orchestration and scoring pipeline.
 - `src/api/` — HTTP client and key failover (`torn-client.js`).
-- `src/utils/` — Extractors, scoring helpers, errors, SQL append.
+- `src/utils/` — Extractors, scoring helpers, monthly v2 recruitment stats, ranked-war participation (`faction-ranked-wars-participation.js`), errors, SQL append.
 - `src/constants.js` — Tunable scoring, default paths, API/error metadata (see [Constants](#constants-srcconstantsjs)).
 - `src/static-api-keys.js` — Default API key pool.
 - `src/index.js` — Public exports (`player-stats-csv-controller.js`).

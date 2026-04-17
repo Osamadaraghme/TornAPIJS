@@ -31,6 +31,7 @@ const {
 const { messageForTornError } = require('../utils/errors.js');
 const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH, DEFAULT_BY_ID_STATS_SQL_PATH } = require('../constants.js');
 const { fetchMonthlyV2RecruitmentStats } = require('../utils/monthly-v2-recruitment-stats.js');
+const { fetchRankedWarsParticipatedLastMonth } = require('../utils/faction-ranked-wars-participation.js');
 const { appendSqlRow } = require('../utils/sql-append.js');
 const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 
@@ -90,6 +91,9 @@ function buildResult(id, profileData, scores, snap, timeScoring, combined01, cou
         xanaxTakenDuringLastMonth: snap.xanaxTakenDuringLastMonth,
         allTimeEcstasyTaken: snap.allTimeEcstasyTaken,
         ecstasyTakenDuringLastMonth: snap.ecstasyTakenDuringLastMonth,
+        allTimeRankedWarHits: snap.allTimeRankedWarHits,
+        rankedWarHitsDuringLastMonth: snap.rankedWarHitsDuringLastMonth,
+        rankedWarsParticipatedLastMonth: snap.rankedWarsParticipatedLastMonth,
         timePlayed: snap.allTimeTimePlayed,
         timePlayedUntilLastMonth: snap.timePlayedUntilLastMonth,
         timePlayedDuringLastMonth: snap.timePlayedDuringLastMonth,
@@ -122,6 +126,23 @@ async function getActiveRankedPlayerById(playerId) {
 
     const ageDays = extractAgeDays(profileData);
     const snap = await fetchMonthlyV2RecruitmentStats(normalizedId, apiKey, counter);
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const monthAgoTimestamp = nowSeconds - Math.floor(AVG_DAYS_PER_MONTH * 86400);
+    const factionIdForWars = extractFactionId(profileData);
+    let rankedWarsParticipatedLastMonth = null;
+    if (factionIdForWars) {
+        rankedWarsParticipatedLastMonth = await fetchRankedWarsParticipatedLastMonth({
+            factionId: factionIdForWars,
+            playerId: normalizedId,
+            apiKey,
+            counter,
+            windowStartSeconds: monthAgoTimestamp,
+            windowEndSeconds: nowSeconds,
+        });
+    }
+    snap.rankedWarsParticipatedLastMonth = rankedWarsParticipatedLastMonth;
+
     const scores = computeScores({
         xanaxTakenTotal: snap.allTimeXanaxTaken,
         xanaxTakenForPeriod: snap.xanaxTakenDuringLastMonth,

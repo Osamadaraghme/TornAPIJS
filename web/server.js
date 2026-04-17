@@ -63,6 +63,9 @@ const RECRUITER_FIELD_ORDER = [
     'xanaxTakenDuringLastMonth',
     'allTimeEcstasyTaken',
     'ecstasyTakenDuringLastMonth',
+    'allTimeRankedWarHits',
+    'rankedWarHitsDuringLastMonth',
+    'rankedWarsParticipatedLastMonth',
     'timePlayed',
     'timePlayedUntilLastMonth',
     'timePlayedDuringLastMonth',
@@ -96,6 +99,9 @@ const FIELD_LABELS = {
     xanaxTakenDuringLastMonth: 'Xanax last month',
     allTimeEcstasyTaken: 'All-time Ecstasy taken',
     ecstasyTakenDuringLastMonth: 'Ecstasy last month',
+    allTimeRankedWarHits: 'All-time ranked war hits',
+    rankedWarHitsDuringLastMonth: 'Ranked war hits (last month)',
+    rankedWarsParticipatedLastMonth: 'Ranked wars participated (last month)',
     timePlayed: 'Time played (all-time)',
     timePlayedUntilLastMonth: 'Time played until last month',
     timePlayedDuringLastMonth: 'Time played (last month)',
@@ -215,6 +221,16 @@ ${inner}
 /** Primary action row on API result / error pages (above the JSON block). */
 function apiBackRow(href, label = 'Search again') {
     return `<p class="api-result-actions"><a class="btn" href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>`;
+}
+
+/** Pretty-printed JSON + copy control for API HTML result pages (Random / By ID / HoF). */
+function renderApiJsonResultBlock(obj) {
+    return `<div class="card api-json-card">
+  <div class="api-json-toolbar">
+    <button type="button" class="btn btn-copy-json" aria-label="Copy JSON to clipboard">Copy JSON</button>
+  </div>
+  <pre class="pre api-json-pre">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>
+</div>`;
 }
 
 function orderColumnsForRecruiterView(columns) {
@@ -985,7 +1001,7 @@ app.post('/api/random/run', async (req, res) => {
 <h1>Random ranked — result</h1>
 ${apiBackRow('/api/random', 'Search again')}
 <p class="msg-ok">Appended row. File: <a href="/exports/view/${encodeURIComponent(base)}">${escapeHtml(out.path)}</a></p>
-<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>`;
+${renderApiJsonResultBlock(out)}`;
         res.type('html').send(layout('Random result', 'random', body));
     } catch (err) {
         const body = `<h1>Random ranked — error</h1>${apiBackRow('/api/random', 'Search again')}<p class="msg-err">${escapeHtml(err.message || err)}</p>`;
@@ -1027,7 +1043,7 @@ app.post('/api/by-id/run', async (req, res) => {
 <h1>Player by ID — result</h1>
 ${apiBackRow('/api/by-id', 'Search again')}
 <p class="msg-ok">Appended row. File: <a href="/exports/view/${encodeURIComponent(base)}">${escapeHtml(out.path)}</a></p>
-<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>`;
+${renderApiJsonResultBlock(out)}`;
         res.type('html').send(layout('By ID result', 'byid', body));
     } catch (err) {
         const body = `<h1>Player by ID — error</h1>${apiBackRow('/api/by-id', 'Search again')}<p class="msg-err">${escapeHtml(err.message || err)}</p>`;
@@ -1069,7 +1085,7 @@ app.post('/api/faction-hof/run', async (req, res) => {
 <h1>Faction HoF — result</h1>
 ${apiBackRow('/api/faction-hof', 'Search again')}
 <p class="msg-ok">Wrote ${escapeHtml(String(out.rowsWritten))} row(s). File: <a href="/exports/view/${encodeURIComponent(base)}">${escapeHtml(out.path)}</a></p>
-<div class="card"><pre class="pre">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>`;
+${renderApiJsonResultBlock(out)}`;
         res.type('html').send(layout('HoF result', 'hof', body));
     } catch (err) {
         const body = `<h1>Faction HoF — error</h1>${apiBackRow('/api/faction-hof', 'Search again')}<p class="msg-err">${escapeHtml(err.message || err)}</p>`;
