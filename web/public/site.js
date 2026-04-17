@@ -1,4 +1,23 @@
 /**
+ * Bulk-action helpers for the saved-data list and per-file viewer.
+ * Inputs/buttons are linked to bulk forms via their `form="..."` attribute,
+ * so we query by attribute selector rather than form descendants.
+ */
+window.bulkSelectAll = function bulkSelectAll(checkbox, formId) {
+    const sel = `input[form="${formId}"][type="checkbox"]`;
+    document.querySelectorAll(sel).forEach((cb) => { cb.checked = checkbox.checked; });
+};
+window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
+    const sel = `input[form="${formId}"]:checked`;
+    const n = document.querySelectorAll(sel).length;
+    if (n === 0) {
+        alert(`Nothing selected. Tick at least one ${label} first.`);
+        return false;
+    }
+    return confirm(`Delete ${n} ${label}? This cannot be undone.`);
+};
+
+/**
  * Header quick jump: type to filter pages, Enter to go. Ctrl+K or / focuses.
  * All-digit query adds “Player by ID — {id}” → /api/by-id?playerId=…
  */

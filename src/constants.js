@@ -13,7 +13,7 @@ const AVG_DAYS_PER_MONTH = 30.4375;
 const XANAX_PER_DAY_FOR_FULL_SCORE = 3;
 
 /** Avg hours played per day (from last-month time delta) that gives 100% on the time component. */
-const HOURS_PER_DAY_FOR_FULL_TIME_SCORE = 6;
+const HOURS_PER_DAY_FOR_FULL_TIME_SCORE = 3;
 
 /** Tier uses combined score: (xan × XAN) + (time × TIME). Must sum to 1. */
 const RECRUITMENT_TIER_XAN_WEIGHT = 0.75;

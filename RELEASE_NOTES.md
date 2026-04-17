@@ -2,6 +2,32 @@
 
 **Torn references:** [API documentation](https://staticfiles.torn.com/api.html) · [API v2 (Swagger)](https://www.torn.com/swagger.php) · [API keys (in-game)](https://www.torn.com/preferences.php#tab=api)
 
+## v2.3.1
+
+**Release date:** April 2026
+
+### Highlights
+
+- **Saved player data — bulk actions:** The `/exports` page gained a select-all checkbox, per-file checkboxes, **Delete checked**, and **Delete all files** (with a second "type-yes-to-confirm" prompt). Per-file card layout shows the human name, raw `.sql` badge, last-modified time and size (`web/server.js`, `web/public/style.css`, `web/public/site.js`).
+- **Saved player data viewer — bulk record actions:** Inside each file viewer, a new toolbar adds select-all-records, **Delete checked records**, and **Delete all records** (`POST /exports/view/:file/delete-rows` and `/delete-all-rows`). Individual row delete is unchanged.
+- **Time-score threshold tightened:** `HOURS_PER_DAY_FOR_FULL_TIME_SCORE` is now **3 h/day** (was 6 h/day) — `averageTimeScore` reaches 100% at a 3 h/day average over the last-month window. Tier weights unchanged (75% xan / 25% time).
+- **Ecstasy (informational, not scored):** `exttaken` is now fetched alongside `xantaken`. Two new export / response fields — `allTimeEcstasyTaken` and `ecstasyTakenDuringLastMonth` — mirror the xanax monthly-delta pattern. **No ecstasy score**, **no tier impact**; `combinedScore` still = `0.75 × xanScore + 0.25 × averageTimeScore`.
+
+### Fixes
+
+- **`buildPlayerStatsCsvRow` now emits ecstasy values:** the two ecstasy columns were added to `CSV_HEADERS` but the row builder wasn't copying them from `stats`, so new INSERTs had the column names listed but `NULL` for the values. Fixed in `src/models/player-stats-csv-model.js`.
+
+### Notes
+
+- Older `.sql` exports without `allTimeEcstasyTaken` / `ecstasyTakenDuringLastMonth` still display (those two cells appear blank); new rows include them, and a row delete in the viewer rewrites the file to the current headers.
+- Rows written by a pre-fix v2.3.1 build (column list had ecstasy but values were `NULL`) can be cleaned up by deleting those rows in the viewer and re-running the API.
+
+### Dependencies
+
+- Unchanged (**express**, **marked**, **github-slugger**).
+
+---
+
 ## v2.3.0
 
 **Release date:** March 2026

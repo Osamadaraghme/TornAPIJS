@@ -88,6 +88,8 @@ function buildResult(id, profileData, scores, snap, timeScoring, combined01, cou
         allTimeXanaxTaken: snap.allTimeXanaxTaken,
         xanaxTakenUntilLastMonth: snap.xanaxTakenUntilLastMonth,
         xanaxTakenDuringLastMonth: snap.xanaxTakenDuringLastMonth,
+        allTimeEcstasyTaken: snap.allTimeEcstasyTaken,
+        ecstasyTakenDuringLastMonth: snap.ecstasyTakenDuringLastMonth,
         timePlayed: snap.allTimeTimePlayed,
         timePlayedUntilLastMonth: snap.timePlayedUntilLastMonth,
         timePlayedDuringLastMonth: snap.timePlayedDuringLastMonth,

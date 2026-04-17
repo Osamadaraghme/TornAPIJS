@@ -61,6 +61,8 @@ const RECRUITER_FIELD_ORDER = [
     'allTimeXanaxTaken',
     'xanaxTakenUntilLastMonth',
     'xanaxTakenDuringLastMonth',
+    'allTimeEcstasyTaken',
+    'ecstasyTakenDuringLastMonth',
     'timePlayed',
     'timePlayedUntilLastMonth',
     'timePlayedDuringLastMonth',
@@ -92,6 +94,8 @@ const FIELD_LABELS = {
     allTimeXanaxTaken: 'All-time Xanax taken',
     xanaxTakenUntilLastMonth: 'Xanax until last month',
     xanaxTakenDuringLastMonth: 'Xanax last month',
+    allTimeEcstasyTaken: 'All-time Ecstasy taken',
+    ecstasyTakenDuringLastMonth: 'Ecstasy last month',
     timePlayed: 'Time played (all-time)',
     timePlayedUntilLastMonth: 'Time played until last month',
     timePlayedDuringLastMonth: 'Time played (last month)',
@@ -387,8 +391,9 @@ function formatTransposedDataCell(col, row) {
     return inner;
 }
 
-function renderPlayerStatsTable(parsed, sqlBasename) {
+function renderPlayerStatsTable(parsed, sqlBasename, options = {}) {
     const { columns, rows } = parsed;
+    const { bulkRowsFormId = null } = options;
     const visibleColumns = columns.filter((c) => !EXPORT_VIEW_HIDDEN_COLUMNS.has(c));
     const orderedColumns = orderColumnsForRecruiterView(visibleColumns);
     const deleteAction = `/exports/view/${encodeURIComponent(sqlBasename)}/delete-row`;
@@ -412,7 +417,13 @@ function renderPlayerStatsTable(parsed, sqlBasename) {
                     ? `<div class="th-record-player-name"><a class="cell-link th-profile-link th-record-player-name-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${nameInner}</a></div>`
                     : `<div class="th-record-player-name">${nameInner}</div>`
                 : '';
+        const checkboxBlock = bulkRowsFormId
+            ? `<label class="th-record-checkbox" title="Select for bulk delete">
+                  <input type="checkbox" form="${escapeHtml(bulkRowsFormId)}" name="rowIndex" value="${i}" aria-label="Select record ${i + 1}"/>
+              </label>`
+            : '';
         headerCells.push(`<th scope="col" class="th-record">
+  ${checkboxBlock}
   <div class="th-record-top">${idBlock}${nameBlock}</div>
   <form class="form-delete-row" method="post" action="${escapeHtml(deleteAction)}" onsubmit="return confirm('Remove this row from the SQL file?');">
     <input type="hidden" name="rowIndex" value="${i}"/>
@@ -493,7 +504,7 @@ function formatRelativeTime(mtimeMs) {
 
 /** Render the "saved player data" file list as cards (used by `/` and `/exports`). */
 function renderSavedDataList(entries, options = {}) {
-    const { compact = false } = options;
+    const { compact = false, bulkFormId = null } = options;
     if (!entries.length) {
         return '<p class="saved-empty">No saved player data files yet. Run an API to create one.</p>';
     }
@@ -501,6 +512,11 @@ function renderSavedDataList(entries, options = {}) {
         .map((e) => {
             const enc = encodeURIComponent(e.name);
             const human = humanizeSqlFileName(e.name);
+            const checkbox = !compact && bulkFormId
+                ? `<label class="bulk-checkbox-cell" title="Select for bulk delete">
+                       <input type="checkbox" form="${escapeHtml(bulkFormId)}" name="fileNames" value="${escapeHtml(e.name)}" class="bulk-checkbox" aria-label="Select ${escapeHtml(e.name)}"/>
+                   </label>`
+                : '';
             const meta = compact
                 ? ''
                 : `<span class="saved-data-meta">${escapeHtml(formatRelativeTime(e.mtimeMs))}`
@@ -512,6 +528,7 @@ function renderSavedDataList(entries, options = {}) {
                        <button type="submit" class="btn-danger" aria-label="Delete ${escapeHtml(e.name)}">Delete</button>
                    </form>`;
             return `<li class="saved-data-row">
+                ${checkbox}
                 <a class="saved-data-link" href="/exports/view/${enc}">
                     <span class="saved-data-name">${escapeHtml(human)}</span>
                     <span class="saved-data-ext">${escapeHtml(e.name)}</span>
@@ -637,13 +654,41 @@ app.get('/', async (req, res) => {
 
 app.get('/exports', async (req, res) => {
     const entries = await listSqlExportEntries();
-    const flash = req.query.deleted ? `<p class="msg-ok">Deleted <code>${escapeHtml(String(req.query.deleted))}</code>.</p>` : '';
-    const list = renderSavedDataList(entries);
+    let flash = '';
+    if (req.query.deleted) {
+        flash = `<p class="msg-ok">Deleted <code>${escapeHtml(String(req.query.deleted))}</code>.</p>`;
+    } else if (req.query.deletedCount) {
+        const n = String(req.query.deletedCount);
+        flash = `<p class="msg-ok">Deleted ${escapeHtml(n)} file(s).</p>`;
+    } else if (req.query.deletedAll) {
+        flash = `<p class="msg-ok">Deleted all saved files.</p>`;
+    }
+    const bulkFormId = 'bulk-files-form';
+    const list = renderSavedDataList(entries, { bulkFormId });
+    const bulkForms = entries.length
+        ? `<form id="${bulkFormId}" method="post" action="/exports/delete-bulk"></form>
+<form id="delete-all-files-form" method="post" action="/exports/delete-all"
+      onsubmit="return confirm('Delete ALL ${entries.length} saved file(s)? This cannot be undone.') && confirm('Are you absolutely sure? This wipes every file in exports/.');"></form>`
+        : '';
+    const bulkBar = entries.length
+        ? `<div class="bulk-toolbar">
+  <label class="bulk-toggle">
+    <input type="checkbox" onclick="bulkSelectAll(this,'${bulkFormId}')" aria-label="Select all files"/>
+    <span>Select all</span>
+  </label>
+  <button type="submit" form="${bulkFormId}" class="btn-danger"
+          onclick="return confirmBulkSubmit('${bulkFormId}','file(s)');">Delete checked</button>
+  <span class="bulk-spacer"></span>
+  <button type="submit" form="delete-all-files-form" class="btn-danger-strong">Delete all files</button>
+</div>`
+        : '';
     const body = `
 <h1>Saved player data</h1>
 ${flash}
+${bulkForms}
 <div class="card">
-  <p class="muted saved-data-intro">Each row is one of your saved player-data files. Click the name to open it, or use <strong>Delete</strong> to remove the file.</p>
+  <p class="muted saved-data-intro">Each row is one of your saved player-data files. Tick boxes to select files, or click a name to open one. Use <strong>Delete</strong> on a row, <strong>Delete checked</strong> for a multi-select, or <strong>Delete all files</strong> to wipe everything.</p>
+  ${bulkBar}
   ${list}
 </div>`;
     res.type('html').send(layout('Saved player data', 'exports', body));
@@ -670,6 +715,73 @@ app.post('/exports/delete/:file', async (req, res) => {
         }
     }
     res.redirect(303, `/exports?deleted=${encodeURIComponent(base)}`);
+});
+
+app.post('/exports/delete-bulk', async (req, res) => {
+    const raw = req.body?.fileNames;
+    const list = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+    let deleted = 0;
+    let errors = [];
+    for (const item of list) {
+        const base = safeSqlBasename(String(item));
+        if (!base) continue;
+        const full = resolvedExportPath(base);
+        if (!full) continue;
+        try {
+            await fsp.unlink(full);
+            deleted++;
+        } catch (err) {
+            if (err && err.code !== 'ENOENT') {
+                errors.push(`${base}: ${err.message || String(err)}`);
+            }
+        }
+    }
+    if (errors.length) {
+        const body = `<h1>Bulk delete — partial failure</h1>
+<p class="msg-ok">Deleted ${deleted} file(s).</p>
+<p class="msg-err">Errors:</p>
+<ul>${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
+<p><a class="btn" href="/exports">Back to saved data</a></p>`;
+        res.status(500).type('html').send(layout('Bulk delete', 'exports', body));
+        return;
+    }
+    res.redirect(303, `/exports?deletedCount=${deleted}`);
+});
+
+app.post('/exports/delete-all', async (req, res) => {
+    let deleted = 0;
+    let errors = [];
+    try {
+        const names = (await fsp.readdir(EXPORTS_DIR)).filter((n) => n.endsWith('.sql'));
+        for (const name of names) {
+            const base = safeSqlBasename(name);
+            if (!base) continue;
+            const full = resolvedExportPath(base);
+            if (!full) continue;
+            try {
+                await fsp.unlink(full);
+                deleted++;
+            } catch (err) {
+                if (err && err.code !== 'ENOENT') {
+                    errors.push(`${base}: ${err.message || String(err)}`);
+                }
+            }
+        }
+    } catch (err) {
+        const msg = `Could not read exports directory: ${escapeHtml(err.message || String(err))}`;
+        res.status(500).type('html').send(layout('Delete failed', 'exports', `<p class="msg-err">${msg}</p>`));
+        return;
+    }
+    if (errors.length) {
+        const body = `<h1>Delete all — partial failure</h1>
+<p class="msg-ok">Deleted ${deleted} file(s).</p>
+<p class="msg-err">Errors:</p>
+<ul>${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
+<p><a class="btn" href="/exports">Back to saved data</a></p>`;
+        res.status(500).type('html').send(layout('Delete all', 'exports', body));
+        return;
+    }
+    res.redirect(303, `/exports?deletedAll=1&deletedCount=${deleted}`);
 });
 
 app.post('/exports/view/:file/delete-row', async (req, res) => {
@@ -700,6 +812,55 @@ app.post('/exports/view/:file/delete-row', async (req, res) => {
     res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
 });
 
+app.post('/exports/view/:file/delete-rows', async (req, res) => {
+    const base = safeSqlBasename(req.params.file);
+    if (!base) {
+        res.status(400).type('html').send(layout('Bad file', 'exports', '<p class="msg-err">Invalid file name.</p>'));
+        return;
+    }
+    const full = resolvedExportPath(base);
+    if (!full || !fs.existsSync(full)) {
+        res.status(404).type('html').send(layout('Not found', 'exports', `<p class="msg-err">File not found: ${escapeHtml(base)}</p>`));
+        return;
+    }
+    const rawIdx = req.body?.rowIndex;
+    const rawList = rawIdx == null ? [] : Array.isArray(rawIdx) ? rawIdx : [rawIdx];
+    const removeSet = new Set();
+    for (const v of rawList) {
+        const n = Number(v);
+        if (Number.isInteger(n) && n >= 0) removeSet.add(n);
+    }
+    if (removeSet.size === 0) {
+        res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
+        return;
+    }
+    const text = await fsp.readFile(full, 'utf8');
+    const parsed = parsePlayerStatsSql(text);
+    if (!parsed) {
+        res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
+        return;
+    }
+    const nextRows = parsed.rows.filter((_, i) => !removeSet.has(i));
+    const normalized = nextRows.map((r) => pickRowForHeaders(CSV_HEADERS, r));
+    writeSqlExportFile(full, CSV_HEADERS, normalized, { tableName: DEFAULT_TABLE_NAME });
+    res.redirect(303, `/exports/view/${encodeURIComponent(base)}?deletedRows=${removeSet.size}`);
+});
+
+app.post('/exports/view/:file/delete-all-rows', async (req, res) => {
+    const base = safeSqlBasename(req.params.file);
+    if (!base) {
+        res.status(400).type('html').send(layout('Bad file', 'exports', '<p class="msg-err">Invalid file name.</p>'));
+        return;
+    }
+    const full = resolvedExportPath(base);
+    if (!full || !fs.existsSync(full)) {
+        res.status(404).type('html').send(layout('Not found', 'exports', `<p class="msg-err">File not found: ${escapeHtml(base)}</p>`));
+        return;
+    }
+    writeSqlExportFile(full, CSV_HEADERS, [], { tableName: DEFAULT_TABLE_NAME });
+    res.redirect(303, `/exports/view/${encodeURIComponent(base)}?clearedAll=1`);
+});
+
 app.get('/exports/view/:file', async (req, res) => {
     const base = safeSqlBasename(req.params.file);
     if (!base) {
@@ -716,15 +877,27 @@ app.get('/exports/view/:file', async (req, res) => {
     const parsed = parsePlayerStatsSql(text);
     const viewPath = `/exports/view/${encodeURIComponent(base)}`;
 
+    let flash = '';
+    if (req.query.deletedRows) {
+        flash = `<p class="msg-ok">Deleted ${escapeHtml(String(req.query.deletedRows))} record(s).</p>`;
+    } else if (req.query.clearedAll) {
+        flash = `<p class="msg-ok">Cleared all records (file kept with header only).</p>`;
+    }
+
     const links = `<p class="export-view-links"><a href="/exports">All exports</a></p>`;
     let meta = '';
     let mainBlock;
+    let bulkBar = '';
+    let bulkForms = '';
+
+    const bulkRowsFormId = 'bulk-rows-form';
+    const useBulk = parsed && !wantRaw && parsed.rows.length > 0;
 
     if (parsed && !wantRaw) {
         meta = `<p class="export-meta"><span class="row-count">${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'}</span>
   <span class="sep">·</span>
   <a href="${escapeHtml(viewPath)}?raw=1">Raw SQL</a></p>`;
-        mainBlock = `<div class="card card-table">${renderPlayerStatsTable(parsed, base)}</div>`;
+        mainBlock = `<div class="card card-table">${renderPlayerStatsTable(parsed, base, { bulkRowsFormId: useBulk ? bulkRowsFormId : null })}</div>`;
     } else {
         if (parsed && wantRaw) {
             meta = `<p class="export-meta"><a href="${escapeHtml(viewPath)}">Table view</a> — ${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'}</p>`;
@@ -734,10 +907,31 @@ app.get('/exports/view/:file', async (req, res) => {
         mainBlock = `<div class="card card-raw"><pre class="pre">${escapeHtml(text)}</pre></div>`;
     }
 
+    if (useBulk) {
+        const deleteRowsAction = `${viewPath}/delete-rows`;
+        const deleteAllRowsAction = `${viewPath}/delete-all-rows`;
+        bulkForms = `<form id="${bulkRowsFormId}" method="post" action="${escapeHtml(deleteRowsAction)}"></form>
+<form id="delete-all-rows-form" method="post" action="${escapeHtml(deleteAllRowsAction)}"
+      onsubmit="return confirm('Delete ALL ${parsed.rows.length} record(s) in this file? The file will be kept (header only).');"></form>`;
+        bulkBar = `<div class="bulk-toolbar bulk-toolbar-records">
+  <label class="bulk-toggle">
+    <input type="checkbox" onclick="bulkSelectAll(this,'${bulkRowsFormId}')" aria-label="Select all records"/>
+    <span>Select all records</span>
+  </label>
+  <button type="submit" form="${bulkRowsFormId}" class="btn-danger"
+          onclick="return confirmBulkSubmit('${bulkRowsFormId}','record(s)');">Delete checked records</button>
+  <span class="bulk-spacer"></span>
+  <button type="submit" form="delete-all-rows-form" class="btn-danger-strong">Delete all records</button>
+</div>`;
+    }
+
     const toolbar = `<div class="export-toolbar">${links}${meta}</div>`;
     const body = `
 <h1>${escapeHtml(base)}</h1>
+${flash}
+${bulkForms}
 ${toolbar}
+${bulkBar}
 ${mainBlock}`;
     res.type('html').send(layout(base, 'exports', body, 'page-export-sql'));
 });

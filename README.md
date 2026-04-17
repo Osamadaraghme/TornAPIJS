@@ -129,7 +129,7 @@ Tunable values live in **`src/constants.js`**. Edit that file, save, and restart
 |----------|------|
 | **`AVG_DAYS_PER_MONTH`** | Divisor when turning monthly xanax / time deltas into per-day averages (default **30.4375**). |
 | **`XANAX_PER_DAY_FOR_FULL_SCORE`** | Lifetime or monthly-derived **avg Xanax/day** that maps to a **100** xan score (default **3**). Lower = easier to max the xan component. |
-| **`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** | **Avg hours played/day** (from the last-month time window) that maps to **100** on the time component (default **6**). |
+| **`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** | **Avg hours played/day** (from the last-month time window) that maps to **100** on the time component (default **3**). |
 | **`RECRUITMENT_TIER_XAN_WEIGHT`** / **`RECRUITMENT_TIER_TIME_WEIGHT`** | Weights for **combined** tier score (default **0.75** / **0.25**). They should **sum to 1**. |
 | **`DEFAULT_*_STATS_SQL_PATH`** | Default `.sql` output paths for each API (unless overridden by CLI, options, or env). |
 | **`API_BASE`** | Torn API host (normally leave as [`https://api.torn.com`](https://api.torn.com)). |
@@ -266,7 +266,7 @@ Same monthly snapshot pattern for **`timeplayed`** (seconds) → **`avgTimePlaye
 averageTimeScore = min(avgHoursPerDay / HOURS_PER_DAY_FOR_FULL_TIME_SCORE, 1) * 100
 ```
 
-**`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** = **6** (6 h/day average over the window → 100, capped).
+**`HOURS_PER_DAY_FOR_FULL_TIME_SCORE`** = **3** (3 h/day average over the window → 100, capped).
 
 ### Combined score and tier
 

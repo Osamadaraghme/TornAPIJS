@@ -1,6 +1,6 @@
 /**
- * Torn v2 personalstats: xantaken + timeplayed (monthly deltas) + activestreak (current).
- * Two requests: all-time snapshot with streak, then xantaken+timeplayed at month-ago timestamp.
+ * Torn v2 personalstats: xantaken + exttaken (ecstasy) + timeplayed (monthly deltas) + activestreak (current).
+ * Two requests: all-time snapshot with streak, then the same drug/time totals at month-ago timestamp.
  */
 
 const { fetchUserPersonalStatsV2 } = require('../api/torn-client.js');
@@ -33,7 +33,7 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
 
     const all = await fetchUserPersonalStatsV2(
         playerId,
-        'xantaken,timeplayed,activestreak',
+        'xantaken,exttaken,timeplayed,activestreak',
         apiKey,
         counter,
     );
@@ -41,7 +41,7 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
 
     const hist = await fetchUserPersonalStatsV2(
         playerId,
-        'xantaken,timeplayed',
+        'xantaken,exttaken,timeplayed',
         apiKey,
         counter,
         monthAgoTimestamp,
@@ -53,6 +53,13 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
     let xanaxTakenDuringLastMonth = null;
     if (allTimeXanaxTaken != null && xanaxTakenUntilLastMonth != null) {
         xanaxTakenDuringLastMonth = Math.max(0, allTimeXanaxTaken - xanaxTakenUntilLastMonth);
+    }
+
+    const allTimeEcstasyTaken = toFiniteNumber(all.values?.exttaken);
+    const ecstasyTakenUntilLastMonth = toFiniteNumber(hist.values?.exttaken);
+    let ecstasyTakenDuringLastMonth = null;
+    if (allTimeEcstasyTaken != null && ecstasyTakenUntilLastMonth != null) {
+        ecstasyTakenDuringLastMonth = Math.max(0, allTimeEcstasyTaken - ecstasyTakenUntilLastMonth);
     }
 
     const allTimeTimePlayed = toFiniteNumber(all.values?.timeplayed);
@@ -68,6 +75,9 @@ async function fetchMonthlyV2RecruitmentStats(playerId, apiKey, counter) {
         allTimeXanaxTaken,
         xanaxTakenUntilLastMonth,
         xanaxTakenDuringLastMonth,
+        allTimeEcstasyTaken,
+        ecstasyTakenUntilLastMonth,
+        ecstasyTakenDuringLastMonth,
         allTimeTimePlayed,
         timePlayedUntilLastMonth,
         timePlayedDuringLastMonth,

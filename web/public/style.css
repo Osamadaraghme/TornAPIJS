@@ -733,3 +733,80 @@ body.page-md-doc main {
     flex-basis: 100%;
   }
 }
+
+/* Bulk action toolbar (saved-data list + per-file viewer) */
+.bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.85rem;
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(15, 20, 28, 0.55);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.bulk-toolbar .bulk-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.bulk-toolbar .bulk-toggle input {
+  width: auto;
+  margin: 0;
+}
+.bulk-toolbar button {
+  margin: 0;
+}
+.bulk-toolbar .bulk-spacer {
+  flex: 1;
+}
+
+/* Per-file checkbox cell */
+.bulk-checkbox-cell {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  cursor: pointer;
+}
+.bulk-checkbox-cell input {
+  width: auto;
+  margin: 0;
+  transform: scale(1.1);
+}
+
+/* Filled-red "Delete all" button (stronger than .btn-danger) */
+.btn-danger-strong {
+  display: inline-block;
+  margin: 0;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--err);
+  background: var(--err);
+  color: #fff;
+  transition: filter 120ms ease;
+}
+.btn-danger-strong:hover {
+  filter: brightness(1.08);
+}
+
+/* Per-record checkbox in transposed table column header */
+.export-table-transposed .th-record-checkbox {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0.35rem;
+  cursor: pointer;
+}
+.export-table-transposed .th-record-checkbox input {
+  width: auto;
+  margin: 0;
+  transform: scale(1.1);
+}
