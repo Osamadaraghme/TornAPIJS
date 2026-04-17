@@ -457,6 +457,32 @@ function safeSqlBasename(raw) {
     return base;
 }
 
+/**
+ * Normalize the optional "SQL file name" input on API forms.
+ * Users supply a bare name (no extension); we always save under `exports/`
+ * with a `.sql` extension. A trailing `.sql` is tolerated so power users
+ * pasting `foo.sql` still get the same result as `foo`.
+ *
+ * @returns {{ provided: false } | { provided: true, ok: true, fullPath: string }
+ *           | { provided: true, ok: false, error: string }}
+ */
+function normalizeUserSqlName(raw) {
+    if (raw == null) return { provided: false };
+    const s = String(raw).trim();
+    if (s === '') return { provided: false };
+    const baseRaw = path.basename(s);
+    const base = baseRaw.replace(/\.sql$/i, '');
+    if (!/^[a-zA-Z0-9._-]+$/.test(base)) {
+        return {
+            provided: true,
+            ok: false,
+            error: 'Invalid SQL file name. Use only letters, numbers, dot, dash, underscore '
+                + '(no slashes, no extension — `.sql` is added automatically).',
+        };
+    }
+    return { provided: true, ok: true, fullPath: path.join(EXPORTS_DIR, `${base}.sql`) };
+}
+
 function resolvedExportPath(base) {
     const full = path.join(EXPORTS_DIR, base);
     const normExports = path.normalize(EXPORTS_DIR + path.sep);
@@ -631,7 +657,7 @@ app.get('/api/random', (req, res) => {
     <div><label>Has faction (Y/N/ANY)</label><input name="hasFaction" value="ANY"/></div>
     <div><label>Has company (Y/N/ANY)</label><input name="hasCompany" value="ANY"/></div>
     <div><label>Min level (optional)</label><input name="minLevel" placeholder="empty"/></div>
-    <div><label>SQL path (optional)</label><input name="sqlPath" placeholder="default exports path"/></div>
+    <div><label>SQL file name (optional)</label><input name="sqlPath" placeholder="e.g. test → exports/test.sql"/></div>
   </div>
   <button type="submit">Run &amp; append SQL</button>
 </form>`;
@@ -640,6 +666,12 @@ app.get('/api/random', (req, res) => {
 
 app.post('/api/random/run', async (req, res) => {
     const o = req.body;
+    const sqlName = normalizeUserSqlName(o.sqlPath);
+    if (sqlName.provided && !sqlName.ok) {
+        const body = `<h1>Random ranked — error</h1>${apiBackRow('/api/random', 'Search again')}<p class="msg-err">${escapeHtml(sqlName.error)}</p>`;
+        res.status(400).type('html').send(layout('Error', 'random', body));
+        return;
+    }
     const opts = {
         activeWithinHours: o.activeWithinHours ? Number(o.activeWithinHours) : undefined,
         minId: o.minId ? Number(o.minId) : undefined,
@@ -650,7 +682,7 @@ app.post('/api/random/run', async (req, res) => {
         hasFaction: o.hasFaction || 'ANY',
         hasCompany: o.hasCompany || 'ANY',
         minLevel: o.minLevel !== '' && o.minLevel != null ? Number(o.minLevel) : undefined,
-        ...(o.sqlPath && String(o.sqlPath).trim() ? { sqlPath: String(o.sqlPath).trim() } : {}),
+        ...(sqlName.provided ? { sqlPath: sqlName.fullPath } : {}),
     };
     try {
         const apiKey = process.env.TORN_API_KEY;
@@ -676,7 +708,7 @@ app.get('/api/by-id', (req, res) => {
 <h1>Player by ID</h1>
 <form method="post" action="/api/by-id/run" class="card">
   <label>Player ID</label><input name="playerId" required value="${safeVal}"/>
-  <label>SQL path (optional)</label><input name="sqlPath" placeholder="default exports path"/>
+  <label>SQL file name (optional)</label><input name="sqlPath" placeholder="e.g. test → exports/test.sql"/>
   <button type="submit">Fetch &amp; append SQL</button>
 </form>`;
     res.type('html').send(layout('Player by ID', 'byid', body));
@@ -688,7 +720,13 @@ app.post('/api/by-id/run', async (req, res) => {
         res.status(400).type('html').send(layout('Error', 'byid', `${apiBackRow('/api/by-id', 'Search again')}<p class="msg-err">playerId required</p>`));
         return;
     }
-    const opts = sqlPath && String(sqlPath).trim() ? { sqlPath: String(sqlPath).trim() } : {};
+    const sqlName = normalizeUserSqlName(sqlPath);
+    if (sqlName.provided && !sqlName.ok) {
+        const body = `<h1>Player by ID — error</h1>${apiBackRow('/api/by-id', 'Search again')}<p class="msg-err">${escapeHtml(sqlName.error)}</p>`;
+        res.status(400).type('html').send(layout('Error', 'byid', body));
+        return;
+    }
+    const opts = sqlName.provided ? { sqlPath: sqlName.fullPath } : {};
     try {
         const out = await exportPlayerByIdToSql(playerId, opts);
         const base = path.basename(out.path);
@@ -710,7 +748,7 @@ app.get('/api/faction-hof', (req, res) => {
 <form method="post" action="/api/faction-hof/run" class="card">
   <label>HoF rank (e.g. 1)</label><input name="hofRank" type="number" min="1" value="1" required/>
   <label>Max players (optional cap)</label><input name="maxPlayers" type="number" min="1" placeholder="all members"/>
-  <label>SQL path (optional)</label><input name="sqlPath" placeholder="default exports path"/>
+  <label>SQL file name (optional)</label><input name="sqlPath" placeholder="e.g. test → exports/test.sql"/>
   <button type="submit">Export members</button>
 </form>`;
     res.type('html').send(layout('Faction HoF', 'hof', body));
@@ -722,9 +760,15 @@ app.post('/api/faction-hof/run', async (req, res) => {
         res.status(400).type('html').send(layout('Error', 'hof', `${apiBackRow('/api/faction-hof', 'Search again')}<p class="msg-err">hofRank required</p>`));
         return;
     }
+    const sqlName = normalizeUserSqlName(sqlPath);
+    if (sqlName.provided && !sqlName.ok) {
+        const body = `<h1>Faction HoF — error</h1>${apiBackRow('/api/faction-hof', 'Search again')}<p class="msg-err">${escapeHtml(sqlName.error)}</p>`;
+        res.status(400).type('html').send(layout('Error', 'hof', body));
+        return;
+    }
     const opts = {};
     if (maxPlayers !== '' && maxPlayers != null) opts.maxPlayers = Number(maxPlayers);
-    if (sqlPath && String(sqlPath).trim()) opts.sqlPath = String(sqlPath).trim();
+    if (sqlName.provided) opts.sqlPath = sqlName.fullPath;
     try {
         const out = await exportFactionByHofRankToSql(hofRank, opts);
         const base = path.basename(out.path);
