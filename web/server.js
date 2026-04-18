@@ -33,13 +33,11 @@ const ROOT = path.join(__dirname, '..');
 const EXPORTS_DIR = path.join(ROOT, 'exports');
 const PORT = Number(process.env.TORN_WEB_PORT || 3847);
 
-/** Shown in export SQL but omitted from the transposed table (used only for name links). */
-const EXPORT_VIEW_HIDDEN_COLUMNS = new Set(['factionId', 'companyId']);
+/** Shown in export SQL but omitted from the transposed table (name/IDs in column headers). */
+const EXPORT_VIEW_HIDDEN_COLUMNS = new Set(['name', 'playerId', 'factionId', 'companyId']);
 
 /** Field order in export table view: recruiter-first; `recordedAt` above `level` (shown as GMT). */
 const RECRUITER_FIELD_ORDER = [
-    'name',
-    'playerId',
     'tier',
     'combinedScore',
     'xanScore',
@@ -75,6 +73,7 @@ const RECRUITER_FIELD_ORDER = [
 ];
 
 const FIELD_LABELS = {
+    lastUpdatedAgo: 'Data last updated',
     recordedAt: 'Recorded at (GMT)',
     requestedFactionHofRank: 'Requested HoF rank',
     name: 'Player name',
@@ -176,7 +175,6 @@ async function sendMarkdownPage(res, relPath, pageTitle, activeNav) {
 
 function nav(active) {
     const items = [
-        ['/', 'Home', 'home'],
         ['/api/random', 'Random ranked', 'random'],
         ['/api/by-id', 'Player by ID', 'byid'],
         ['/api/faction-hof', 'Faction HoF', 'hof'],
@@ -193,7 +191,8 @@ function nav(active) {
         .join('\n');
     return `<header class="site-header">
   <div class="header-inner">
-    <nav class="nav-links" aria-label="Main"><a href="/" class="brand">Botato's Torn Scripts</a>${links}</nav>
+    <a href="/" class="site-brand" aria-label="Home">Botato's Torn Scripts</a>
+    <nav class="nav-links" aria-label="Main">${links}</nav>
     <div class="quick-jump" role="search">
       <label class="visually-hidden" for="api-quick-filter">Quick go to page or player ID</label>
       <input type="search" id="api-quick-filter" class="quick-jump-input" autocomplete="off" placeholder="Quick go… (Ctrl+K)" spellcheck="false" aria-autocomplete="list" aria-controls="api-quick-results" aria-expanded="false"/>
@@ -223,16 +222,16 @@ ${inner}
 </html>`;
 }
 
-/** Primary action row on API result / error pages (above the JSON block). */
+/** Primary action row on API result / error pages (above the full result block). */
 function apiBackRow(href, label = 'Search again') {
     return `<p class="api-result-actions"><a class="btn" href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>`;
 }
 
-/** Pretty-printed JSON + copy control for API HTML result pages (Random / By ID / HoF). */
+/** Pretty-printed API result + copy control for HTML result pages (Random / By ID / HoF). */
 function renderApiJsonResultBlock(obj) {
     return `<div class="card api-json-card">
   <div class="api-json-toolbar">
-    <button type="button" class="btn btn-copy-json" aria-label="Copy JSON to clipboard">Copy JSON</button>
+    <button type="button" class="btn btn-copy-json" aria-label="Copy all result data to clipboard">Copy data</button>
   </div>
   <pre class="pre api-json-pre">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>
 </div>`;
@@ -244,6 +243,18 @@ function orderColumnsForRecruiterView(columns) {
     const knownSet = new Set(knownOrdered);
     const extras = columns.filter((c) => !knownSet.has(c));
     return [...knownOrdered, ...extras];
+}
+
+/** Viewer-only row derived from `recordedAt`; inserted before that column (not in SQL). */
+function orderedColumnsWithLastUpdateRow(orderedColumns) {
+    const base = orderedColumns.filter((c) => c !== 'lastUpdatedAgo');
+    const idx = base.indexOf('recordedAt');
+    if (idx >= 0) {
+        const out = [...base];
+        out.splice(idx, 0, 'lastUpdatedAgo');
+        return out;
+    }
+    return [...base, 'lastUpdatedAgo'];
 }
 
 function fieldLabelForColumn(col) {
@@ -350,6 +361,31 @@ function formatRecordedAtHtml(raw) {
     return `<span class="cell-str cell-recorded-at" title="${escapeHtml(s)}">${escapeHtml(human)}</span>`;
 }
 
+function formatLastUpdatedAgoHtml(rawRecordedAt) {
+    if (rawRecordedAt === null || rawRecordedAt === undefined) {
+        return '<span class="cell-null">NULL</span>';
+    }
+    const s = String(rawRecordedAt).trim();
+    if (!s) return '<span class="cell-null">NULL</span>';
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) {
+        return '<span class="cell-str">—</span>';
+    }
+    const diffSec = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+    const title = ` title="${escapeHtml(s)}"`;
+    if (diffSec < 60) return `<span class="cell-str cell-last-update"${title}>just now</span>`;
+    if (diffSec < 3600) {
+        const m = Math.floor(diffSec / 60);
+        return `<span class="cell-str cell-last-update"${title}>${m} min ago</span>`;
+    }
+    if (diffSec < 86400) {
+        const h = Math.floor(diffSec / 3600);
+        return `<span class="cell-str cell-last-update"${title}>${h} hour${h === 1 ? '' : 's'} ago</span>`;
+    }
+    const days = Math.floor(diffSec / 86400);
+    return `<span class="cell-str cell-last-update"${title}>${days} day${days === 1 ? '' : 's'} ago</span>`;
+}
+
 function formatTableCell(value) {
     if (value === null || value === undefined) {
         return '<span class="cell-null">NULL</span>';
@@ -372,7 +408,10 @@ function formatTableCell(value) {
 }
 
 function formatTransposedDataCell(col, row) {
-    const v = row[col];
+    const v = col === 'lastUpdatedAgo' ? row.recordedAt : row[col];
+    if (col === 'lastUpdatedAgo') {
+        return formatLastUpdatedAgoHtml(row.recordedAt);
+    }
     if (col === 'recordedAt') {
         return formatRecordedAtHtml(v);
     }
@@ -416,8 +455,9 @@ function renderPlayerStatsTable(parsed, sqlBasename, options = {}) {
     const { columns, rows } = parsed;
     const { bulkRowsFormId = null } = options;
     const visibleColumns = columns.filter((c) => !EXPORT_VIEW_HIDDEN_COLUMNS.has(c));
-    const orderedColumns = orderColumnsForRecruiterView(visibleColumns);
+    const orderedColumns = orderedColumnsWithLastUpdateRow(orderColumnsForRecruiterView(visibleColumns));
     const deleteAction = `/exports/view/${encodeURIComponent(sqlBasename)}/delete-row`;
+    const updateAction = `/exports/view/${encodeURIComponent(sqlBasename)}/update-row`;
     if (rows.length === 0) {
         return `<p class="export-empty muted">No data rows in this file. The header lists <strong>${columns.length}</strong> field(s); add rows from an API or restore from backup.</p>`;
     }
@@ -432,33 +472,47 @@ function renderPlayerStatsTable(parsed, sqlBasename, options = {}) {
                 : idText;
         const nameRaw = r.name != null ? String(r.name).trim() : '';
         const nameInner = nameRaw !== '' ? escapeHtml(decodeHtmlEntities(nameRaw)) : '';
-        const nameBlock =
+        const nameLine =
             nameInner !== ''
                 ? url && r.playerId != null
-                    ? `<div class="th-record-player-name"><a class="cell-link th-profile-link th-record-player-name-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${nameInner}</a></div>`
-                    : `<div class="th-record-player-name">${nameInner}</div>`
+                    ? `<span class="th-record-nameline"><a class="cell-link th-profile-link th-record-name-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${nameInner}</a></span>`
+                    : `<span class="th-record-nameline">${nameInner}</span>`
                 : '';
+        const idLine = `<span class="th-record-idline">${idBlock}</span>`;
+        const whoBlock =
+            nameInner !== ''
+                ? `<div class="th-record-who">${nameLine}${idLine}</div>`
+                : `<div class="th-record-who th-record-who-id-only">${idLine}</div>`;
         const checkboxBlock = bulkRowsFormId
             ? `<label class="th-record-checkbox" title="Select for bulk delete">
                   <input type="checkbox" form="${escapeHtml(bulkRowsFormId)}" name="rowIndex" value="${i}" aria-label="Select record ${i + 1}"/>
               </label>`
             : '';
-        headerCells.push(`<th scope="col" class="th-record">
-  ${checkboxBlock}
-  <div class="th-record-top">${idBlock}${nameBlock}</div>
-  <button type="button" class="btn btn-copy-player-json" data-player-row="${i}" title="Copy this player row as JSON" aria-label="Copy row ${i + 1} as JSON">Copy JSON</button>
+        const dragHandle =
+            '<span class="th-record-drag-handle" draggable="true" title="Drag to reorder columns" aria-label="Drag to reorder columns">≡</span>';
+        const actionsBlock = `<div class="th-record-actions">
+  <form class="form-update-row" method="post" action="${escapeHtml(updateAction)}" onsubmit="return confirm('Update this player from Torn API now?');">
+    <input type="hidden" name="rowIndex" value="${i}"/>
+    <button type="submit" class="btn-update">Update</button>
+  </form>
+  <button type="button" class="btn btn-copy-player-json btn-copy-player-data" data-player-row="${i}" title="Copy everything saved for this player (paste into a note, email, or spreadsheet)" aria-label="Copy this player’s saved data">Copy data</button>
   <form class="form-delete-row" method="post" action="${escapeHtml(deleteAction)}" onsubmit="return confirm('Remove this row from the SQL file?');">
     <input type="hidden" name="rowIndex" value="${i}"/>
     <button type="submit" class="btn-delete">Delete</button>
   </form>
-</th>`);
+</div>`;
+        const headBlock = `<div class="th-record-head">
+  <div class="th-record-head-primary">${dragHandle}${checkboxBlock}${whoBlock}</div>
+  ${actionsBlock}
+</div>`;
+        headerCells.push(`<th scope="col" class="th-record">${headBlock}</th>`);
     }
     const bodyRows = orderedColumns
         .map((col) => {
             const fieldCell = `<th scope="row" class="field-name">${escapeHtml(fieldLabelForColumn(col))}</th>`;
             const cells = rows
                 .map((row) => {
-                    const v = row[col];
+                    const v = col === 'lastUpdatedAgo' ? row.recordedAt : row[col];
                     const tdCls = TIME_PLAYED_SECONDS_COLUMNS.has(col) ? 'td-str' : cellTdClass(v);
                     return `<td class="${tdCls}">${formatTransposedDataCell(col, row)}</td>`;
                 })
@@ -885,6 +939,43 @@ app.post('/exports/view/:file/delete-all-rows', async (req, res) => {
     res.redirect(303, `/exports/view/${encodeURIComponent(base)}?clearedAll=1`);
 });
 
+app.post('/exports/view/:file/update-row', async (req, res) => {
+    const base = safeSqlBasename(req.params.file);
+    if (!base) {
+        res.status(400).type('html').send(layout('Bad file', 'exports', '<p class="msg-err">Invalid file name.</p>'));
+        return;
+    }
+    const full = resolvedExportPath(base);
+    if (!full || !fs.existsSync(full)) {
+        res.status(404).type('html').send(layout('Not found', 'exports', `<p class="msg-err">File not found: ${escapeHtml(base)}</p>`));
+        return;
+    }
+    const rowIndex = Number(req.body?.rowIndex);
+    if (!Number.isInteger(rowIndex) || rowIndex < 0) {
+        res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
+        return;
+    }
+    const text = await fsp.readFile(full, 'utf8');
+    const parsed = parsePlayerStatsSql(text);
+    if (!parsed || rowIndex >= parsed.rows.length) {
+        res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
+        return;
+    }
+    const playerId = parsed.rows[rowIndex]?.playerId;
+    const pNum = Number(playerId);
+    if (!Number.isFinite(pNum) || pNum <= 0) {
+        res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updateErr=${encodeURIComponent(`Row ${rowIndex + 1} has no valid playerId`)}`);
+        return;
+    }
+    try {
+        await exportPlayerByIdToSql(pNum, { sqlPath: full });
+        res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updatedId=${encodeURIComponent(String(Math.floor(pNum)))}`);
+    } catch (err) {
+        const msg = err?.message ? String(err.message) : String(err);
+        res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updateErr=${encodeURIComponent(msg)}`);
+    }
+});
+
 app.get('/exports/view/:file', async (req, res) => {
     const base = safeSqlBasename(req.params.file);
     if (!base) {
@@ -906,6 +997,10 @@ app.get('/exports/view/:file', async (req, res) => {
         flash = `<p class="msg-ok">Deleted ${escapeHtml(String(req.query.deletedRows))} record(s).</p>`;
     } else if (req.query.clearedAll) {
         flash = `<p class="msg-ok">Cleared all records (file kept with header only).</p>`;
+    } else if (req.query.updatedId) {
+        flash = `<p class="msg-ok">Updated player <code>#${escapeHtml(String(req.query.updatedId))}</code> from Torn API.</p>`;
+    } else if (req.query.updateErr) {
+        flash = `<p class="msg-err">Update failed: ${escapeHtml(String(req.query.updateErr))}</p>`;
     }
 
     const links = `<p class="export-view-links"><a href="/exports">All exports</a></p>`;

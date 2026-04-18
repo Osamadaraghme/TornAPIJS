@@ -175,7 +175,7 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
 })();
 
 /**
- * Copy JSON to clipboard with button feedback (API result cards + export viewer per-player rows).
+ * Copy formatted result data to clipboard (API result cards + export viewer per-player rows).
  */
 (function () {
     async function copyPlainTextWithButtonFeedback(button, text, doneClass) {
@@ -241,6 +241,117 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
             if (!Number.isInteger(idx) || idx < 0 || idx >= rows.length) return;
             const text = JSON.stringify(rows[idx], null, 2);
             await copyPlainTextWithButtonFeedback(playerBtn, text, 'btn-copy-player-json--done');
+        }
+    });
+})();
+
+/**
+ * Saved player data viewer: reorder player columns by dragging the ≡ handle in each header.
+ * DOM-only (refresh restores server order). Row indices for delete / Copy data move with the column.
+ */
+(function initExportViewColumnReorder() {
+    let columnDragActive = false;
+    let dragSourceTh = null;
+
+    function clearDropHighlights(table) {
+        if (!table) return;
+        table.querySelectorAll('thead .th-record--drop-target').forEach((el) => {
+            el.classList.remove('th-record--drop-target');
+        });
+    }
+
+    /**
+     * Move the player column at table cellIndex `fromIdx` to sit immediately before column `toIdx`
+     * (same semantics as drop target header). Works for any from/to because we reorder a detached
+     * player-cell list with splice instead of insertBefore (which breaks when fromIdx < toIdx).
+     */
+    function reorderPlayerColumns(table, fromIdx, toIdx) {
+        if (fromIdx === toIdx || fromIdx < 1 || toIdx < 1) return;
+        const theadRow = table.tHead?.rows[0];
+        const tbody = table.tBodies[0];
+        if (!theadRow || !tbody) return;
+        const max = theadRow.cells.length - 1;
+        if (fromIdx > max || toIdx > max) return;
+
+        const from = fromIdx - 1;
+        const to = toIdx - 1;
+        if (from === to) return;
+
+        const rows = [theadRow, ...Array.from(tbody.rows)];
+        for (const tr of rows) {
+            const playerCells = [];
+            while (tr.cells.length > 1) {
+                playerCells.push(tr.removeChild(tr.cells[1]));
+            }
+            const item = playerCells.splice(from, 1)[0];
+            if (!item) continue;
+            if (from < to) {
+                playerCells.splice(to - 1, 0, item);
+            } else {
+                playerCells.splice(to, 0, item);
+            }
+            for (const c of playerCells) {
+                tr.appendChild(c);
+            }
+        }
+    }
+
+    document.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.th-record-drag-handle');
+        if (!handle) return;
+        const table = handle.closest('table.export-table-transposed');
+        if (!table) return;
+        const th = handle.closest('thead th.th-record');
+        if (!th) return;
+        columnDragActive = true;
+        dragSourceTh = th;
+        th.classList.add('th-record--dragging');
+        const idx = th.cellIndex;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+    });
+
+    document.addEventListener('dragend', () => {
+        if (!dragSourceTh) return;
+        const table = dragSourceTh.closest('table.export-table-transposed');
+        dragSourceTh.classList.remove('th-record--dragging');
+        dragSourceTh = null;
+        columnDragActive = false;
+        clearDropHighlights(table);
+    });
+
+    document.addEventListener('dragover', (e) => {
+        if (!columnDragActive) return;
+        const table = e.target.closest('table.export-table-transposed');
+        if (!table) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clearDropHighlights(table);
+        const th = e.target.closest('thead th.th-record');
+        if (th && table.contains(th)) {
+            th.classList.add('th-record--drop-target');
+        }
+    });
+
+    document.addEventListener('drop', (e) => {
+        if (!columnDragActive) return;
+        const th = e.target.closest('thead th.th-record');
+        const table = th?.closest('table.export-table-transposed');
+        if (!table || !th) return;
+        e.preventDefault();
+        let fromIdx = Number.parseInt(e.dataTransfer.getData('text/plain'), 10);
+        if (!Number.isFinite(fromIdx)) {
+            fromIdx = Number.parseInt(e.dataTransfer.getData('application/x-export-col'), 10);
+        }
+        const toIdx = th.cellIndex;
+        clearDropHighlights(table);
+        if (Number.isFinite(fromIdx) && Number.isFinite(toIdx)) {
+            reorderPlayerColumns(table, fromIdx, toIdx);
+        }
+        columnDragActive = false;
+        if (dragSourceTh) {
+            dragSourceTh.classList.remove('th-record--dragging');
+            dragSourceTh = null;
         }
     });
 })();

@@ -8,6 +8,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { parsePlayerStatsSql } = require(path.join(__dirname, '..', '..', 'web', 'lib', 'parse-player-stats-sql.js'));
+
 const DEFAULT_TABLE_NAME = 'player_stats';
 
 const NAMED_ENTITIES = {
@@ -99,6 +101,14 @@ function pickRowForHeaders(headers, row) {
     return o;
 }
 
+function samePlayerId(a, b) {
+    if (a == null || b == null) return false;
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+    return String(a) === String(b);
+}
+
 /**
  * Overwrite export file with sentinel, header comments, and INSERTs (0+ rows).
  * @param {string} filePath
@@ -125,10 +135,13 @@ function writeSqlExportFile(filePath, headers, rows, options = {}) {
  * @param {string} filePath
  * @param {string[]} headers - Column order (must match keys in row)
  * @param {Record<string, unknown>} row
- * @param {{ tableName?: string }} [options]
+ * @param {{ tableName?: string, upsertByPlayerId?: boolean }} [options]
+ *   When `upsertByPlayerId` is not false (default), a row with the same `playerId`
+ *   is replaced; otherwise a new INSERT is appended.
  */
 function appendSqlRow(filePath, headers, row, options = {}) {
     const tableName = options.tableName || DEFAULT_TABLE_NAME;
+    const upsertByPlayerId = options.upsertByPlayerId !== false;
     const resolved = path.resolve(filePath);
     const sentinelLine = buildSentinelLine(tableName, headers);
     const headerBlock = buildHeaderBlock(tableName, headers);
@@ -159,6 +172,23 @@ function appendSqlRow(filePath, headers, row, options = {}) {
                     const normalizedContent = content.endsWith('\n') ? content : `${content}\n`;
                     const body = `${sentinelLine}\n${headerBlock}${normalizedContent}${insertBlock}`;
                     fs.writeFileSync(resolved, body, 'utf8');
+                } else if (upsertByPlayerId) {
+                    const parsed = parsePlayerStatsSql(content);
+                    if (parsed && Array.isArray(parsed.rows)) {
+                        const rows = parsed.rows.map((r) => pickRowForHeaders(headers, r));
+                        const newRow = pickRowForHeaders(headers, row);
+                        const pId = newRow.playerId;
+                        if (pId != null && String(pId).trim() !== '') {
+                            const idx = rows.findIndex((r) => samePlayerId(r.playerId, pId));
+                            if (idx >= 0) rows[idx] = newRow;
+                            else rows.push(newRow);
+                        } else {
+                            rows.push(newRow);
+                        }
+                        writeSqlExportFile(resolved, headers, rows, { tableName });
+                    } else {
+                        fs.appendFileSync(resolved, insertBlock, 'utf8');
+                    }
                 } else {
                     fs.appendFileSync(resolved, insertBlock, 'utf8');
                 }
