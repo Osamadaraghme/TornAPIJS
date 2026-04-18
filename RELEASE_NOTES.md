@@ -2,9 +2,19 @@
 
 **Torn references:** [API documentation](https://staticfiles.torn.com/api.html) · [API v2 (Swagger)](https://www.torn.com/swagger.php) · [API keys (in-game)](https://www.torn.com/preferences.php#tab=api)
 
+## v3.0.1
+
+**Release date:** April 19, 2026
+
+### Documentation
+
+- **Release notes:** every listed version now includes a **full calendar** **Release date** (month, day, year), aligned with git history where available.
+
+---
+
 ## v3.0.0
 
-**Release date:** April 2026
+**Release date:** April 18, 2026
 
 ### Highlights
 
@@ -28,7 +38,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.8
 
-**Release date:** April 2026
+**Release date:** April 18, 2026
 
 ### Highlights
 
@@ -44,7 +54,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.7
 
-**Release date:** April 2026
+**Release date:** April 18, 2026
 
 ### Highlights
 
@@ -62,7 +72,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.6
 
-**Release date:** April 2026
+**Release date:** April 18, 2026
 
 ### Highlights
 
@@ -78,7 +88,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.5
 
-**Release date:** April 2026
+**Release date:** April 18, 2026
 
 ### Highlights
 
@@ -100,7 +110,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.4
 
-**Release date:** April 2026
+**Release date:** April 18, 2026
 
 ### Highlights
 
@@ -119,7 +129,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.3
 
-**Release date:** April 2026
+**Release date:** April 18, 2026
 
 ### Highlights
 
@@ -141,7 +151,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.2
 
-**Release date:** April 2026
+**Release date:** April 17, 2026
 
 ### Highlights
 
@@ -163,7 +173,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.1
 
-**Release date:** April 2026
+**Release date:** April 17, 2026
 
 ### Highlights
 
@@ -189,7 +199,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.3.0
 
-**Release date:** March 2026
+**Release date:** March 28, 2026
 
 ### Highlights
 
@@ -214,7 +224,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.2.0
 
-**Release date:** 2026
+**Release date:** March 28, 2026
 
 ### Highlights
 
@@ -232,7 +242,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.1.0
 
-**Release date:** 2026
+**Release date:** March 28, 2026
 
 ### Highlights
 
@@ -253,7 +263,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v2.0.0
 
-**Release date:** 2026
+**Release date:** March 28, 2026
 
 ### Highlights
 
@@ -294,6 +304,8 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v1.0.2 (latest patch updates)
 
+**Release date:** March 19, 2026
+
 ### Post-release updates
 
 *Historical note: the `TORN_XANAX_MODE` items below describe an older v1-era behavior. **v2+** does not implement that env switch; use the current README and release notes above.*
@@ -309,7 +321,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v1.0.2
 
-**Release date:** 2026
+**Release date:** March 18, 2026
 
 ### Changes since v1.0.1
 
@@ -327,7 +339,7 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 
 ## v1.0.1
 
-**Release date:** 2025
+**Release date:** March 18, 2026
 
 ### Changes since v1.0.0
 
@@ -344,6 +356,8 @@ Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (n
 ---
 
 ## v1.0.0
+
+**Release date:** March 18, 2026
 
 - Random active player API with xanax-based tier (S/A/B/C/D).
 - Single API call per try (profile + personalstats combined) to minimize Torn API usage.
