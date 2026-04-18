@@ -2,7 +2,7 @@
  * Torn API error handling and user-facing "no player found" messages.
  */
 
-const { TORN_ERROR_MESSAGES } = require('../constants.js');
+const { getMergedConstants } = require('../constants.js');
 
 /**
  * Human-readable message for a Torn API error payload.
@@ -11,6 +11,7 @@ const { TORN_ERROR_MESSAGES } = require('../constants.js');
  */
 function messageForTornError(errorPayload) {
     if (!errorPayload) return null;
+    const { TORN_ERROR_MESSAGES } = getMergedConstants();
     const code = errorPayload.code ?? errorPayload.error_code ?? null;
     const msg = errorPayload.error ?? errorPayload.message ?? null;
     if (code != null && TORN_ERROR_MESSAGES[code]) return TORN_ERROR_MESSAGES[code];

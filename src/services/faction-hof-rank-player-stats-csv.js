@@ -7,7 +7,7 @@ const { fetchTorn, fetchFaction } = require('../api/torn-client.js');
 const { getActiveRankedPlayerById } = require('./active-ranked-player-by-id.js');
 const { appendSqlRow } = require('../utils/sql-append.js');
 const { messageForTornError } = require('../utils/errors.js');
-const { TORN_FATAL_ERROR_CODES, DEFAULT_FACTION_HOF_STATS_SQL_PATH } = require('../constants.js');
+const { getMergedConstants } = require('../constants.js');
 const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 
 function asFiniteNumber(v) {
@@ -107,6 +107,7 @@ function extractFactionMembers(payload) {
 }
 
 async function fetchFactionWithMembers(factionId, apiKey, counter) {
+    const { TORN_FATAL_ERROR_CODES } = getMergedConstants();
     const selectionsToTry = ['basic', 'members', 'basic,members'];
     let lastError = null;
 
@@ -145,6 +146,7 @@ async function fetchFactionWithMembers(factionId, apiKey, counter) {
  * @returns {Promise<object>}
  */
 async function getFactionPlayersByHofRankToSql(factionHofRank, options = {}) {
+    const { DEFAULT_FACTION_HOF_STATS_SQL_PATH, TORN_FATAL_ERROR_CODES } = getMergedConstants();
     const apiKey = process.env.TORN_API_KEY;
 
     const rank = asPositiveInt(factionHofRank);

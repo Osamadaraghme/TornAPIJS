@@ -29,7 +29,7 @@ const {
     tierForFinalScore,
 } = require('../utils/scoring.js');
 const { messageForTornError } = require('../utils/errors.js');
-const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH, DEFAULT_BY_ID_STATS_SQL_PATH } = require('../constants.js');
+const { getMergedConstants } = require('../constants.js');
 const { fetchMonthlyV2RecruitmentStats } = require('../utils/monthly-v2-recruitment-stats.js');
 const { fetchRankedWarsParticipatedLastMonth } = require('../utils/faction-ranked-wars-participation.js');
 const { appendSqlRow } = require('../utils/sql-append.js');
@@ -39,6 +39,7 @@ function throwOnTornError(errorObj) {
     if (!errorObj) return;
     const message = messageForTornError(errorObj);
     const code = errorObj?.code ?? errorObj?.error_code;
+    const { TORN_FATAL_ERROR_CODES } = getMergedConstants();
     if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
         throw new Error(message || `Torn API error (code ${code}).`);
     }
@@ -46,6 +47,7 @@ function throwOnTornError(errorObj) {
 }
 
 function buildResult(id, profileData, scores, snap, timeScoring, combined01, counter, ageDays) {
+    const { AVG_DAYS_PER_MONTH } = getMergedConstants();
     const name = extractName(profileData);
     const level = extractLevel(profileData);
     const hasFaction = hasFactionFromProfile(profileData);
@@ -111,6 +113,7 @@ function buildResult(id, profileData, scores, snap, timeScoring, combined01, cou
 }
 
 async function getActiveRankedPlayerById(playerId) {
+    const { AVG_DAYS_PER_MONTH } = getMergedConstants();
     const apiKey = process.env.TORN_API_KEY;
     if (playerId == null || playerId === '') throw new Error('playerId is required.');
 
@@ -192,6 +195,7 @@ async function getActiveRankedPlayerById(playerId) {
  * @returns {Promise<{ path: string, created: boolean, data: object }>}
  */
 async function getActiveRankedPlayerByIdToSql(playerId, options = {}) {
+    const { DEFAULT_BY_ID_STATS_SQL_PATH } = getMergedConstants();
     const sqlPath = options.sqlPath
         ?? options.csvPath
         ?? process.env.TORN_BY_ID_STATS_SQL

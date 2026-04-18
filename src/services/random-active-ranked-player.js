@@ -30,11 +30,7 @@ const {
     VALID_TIERS,
 } = require('../utils/scoring.js');
 const { messageForTornError, buildNoPlayerFoundError } = require('../utils/errors.js');
-const {
-    TORN_FATAL_ERROR_CODES,
-    AVG_DAYS_PER_MONTH,
-    DEFAULT_RANDOM_STATS_SQL_PATH,
-} = require('../constants.js');
+const { getMergedConstants } = require('../constants.js');
 const { appendSqlRow } = require('../utils/sql-append.js');
 const { CSV_HEADERS, buildPlayerStatsCsvRow } = require('../models/player-stats-csv-model.js');
 const { fetchMonthlyV2RecruitmentStats } = require('../utils/monthly-v2-recruitment-stats.js');
@@ -45,6 +41,7 @@ function throwOnTornError(errorObj) {
     if (!errorObj) return;
     const message = messageForTornError(errorObj);
     const code = errorObj?.code ?? errorObj?.error_code;
+    const { TORN_FATAL_ERROR_CODES } = getMergedConstants();
     if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
         throw new Error(message || `Torn API error (code ${code}).`);
     }
@@ -75,6 +72,7 @@ function passesFactionCompanyFilters(profileData, factionFilter, companyFilter) 
 }
 
 function buildResult(id, profileData, scores, snap, timeScoring, combined01, counter, ageDays) {
+    const { AVG_DAYS_PER_MONTH } = getMergedConstants();
     const name = extractName(profileData);
     const level = extractLevel(profileData);
     const hasFaction = hasFactionFromProfile(profileData);
@@ -147,6 +145,8 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
         companyFilter,
         minLevel,
     } = parseOptions(opts);
+
+    const { TORN_FATAL_ERROR_CODES, AVG_DAYS_PER_MONTH } = getMergedConstants();
 
     const counter = { value: 0 };
     const runStats = { profilesOk: 0, activeCount: 0, passedFiltersCount: 0, lastTornError: null };
@@ -254,6 +254,7 @@ async function getRandomActiveRankedPlayer(apiKey, opts = {}) {
  * @returns {Promise<{ path: string, created: boolean, data: object }>}
  */
 async function getRandomActiveRankedPlayerToSql(apiKey, options = {}) {
+    const { DEFAULT_RANDOM_STATS_SQL_PATH } = getMergedConstants();
     const sqlPath = options.sqlPath
         ?? options.csvPath
         ?? process.env.TORN_RANDOM_STATS_SQL

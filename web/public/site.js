@@ -28,6 +28,7 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
         { href: '/api/by-id', label: 'Player by ID', keywords: 'by id player lookup profile xid' },
         { href: '/api/faction-hof', label: 'Faction HoF', keywords: 'hof hall fame faction rank' },
         { href: '/exports', label: 'Saved player data', keywords: 'files browse sql export saved player data delete' },
+        { href: '/admin/control-panel', label: 'Settings', keywords: 'admin control panel constants api keys scoring' },
         { href: '/readme', label: 'README', keywords: 'docs readme documentation' },
         { href: '/release-notes', label: 'Release notes', keywords: 'changelog releases version' },
         { href: '/about', label: 'About', keywords: 'botato author' },

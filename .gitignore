@@ -2,3 +2,8 @@ node_modules/
 .env
 *.log
 exports/
+data/tornapijs-control.json
+data/*.json.tmp
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal

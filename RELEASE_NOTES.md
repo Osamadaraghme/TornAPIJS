@@ -2,6 +2,102 @@
 
 **Torn references:** [API documentation](https://staticfiles.torn.com/api.html) · [API v2 (Swagger)](https://www.torn.com/swagger.php) · [API keys (in-game)](https://www.torn.com/preferences.php#tab=api)
 
+## v3.0.0
+
+**Release date:** April 2026
+
+### Highlights
+
+This **major** release is built around **web admin controls**, gitignored local secrets, and clearer operator UX.
+
+- **First-run & secrets:** Until the settings JSON exists, the app sends you to **`/first-run`** to create it (admin token, optional public key list, optional **settings profile**). Data stays under **`data/`** (gitignored). Optional **`FIRST_RUN_SECRET`**: the wizard must send matching **`X-First-Run-Secret`**. **`TORN_ADMIN_PROFILE`** or the wizard profile selects **`data/tornapijs-control-<slug>.json`**; **`TORN_SETTINGS_DB_PATH`** still sets an explicit file path.
+- **Admin-editable scope:** The control panel may change **only** the public API key pool and **scoring** constants (days per month, xan/time “100%” targets, tier xan/time weights). **`API_BASE`**, default export paths, and Torn error maps are **not** stored or edited via admin JSON anymore; the file is **pruned** of legacy keys on load/save.
+- **Control panel UX:** **Update** beside each field (one-key save), **Save all changes** for batch edits, and visible **success feedback** (field highlight + status pulse).
+- **Saved SQL viewer:** Table view **recomputes** xan / time / combined scores and tier from each row’s stored stats using **current** merged constants (file on disk is unchanged). Score column tooltips describe **your settings** in short copy instead of long formulas.
+- **Layout:** **README**, **Release notes**, and **About** moved to a **footer** on every page; the header keeps recruitment tools + **Settings**.
+
+### Upgrade from 2.x
+
+SQL export shape and CLI entry points are unchanged. Pull **`v3.0.0`**, run **`npm install`** if needed, restart **`npm run web`**. If you previously kept **`API_BASE`**, **`DEFAULT_*_STATS_SQL_PATH`**, **`TORN_ERROR_MESSAGES`**, or **`TORN_FATAL_ERROR_CODES`** overrides only in the admin JSON file, copy those values into **`src/constants-defaults.js`** (or your fork) — they are no longer applied from the settings store.
+
+### Dependencies
+
+Same as **v2.3.8**: **bcryptjs**, **express**, **marked**, **github-slugger** (no native SQLite driver).
+
+---
+
+## v2.3.8
+
+**Release date:** April 2026
+
+### Highlights
+
+- **First-run wizard:** Until the local settings JSON exists, the web UI redirects to **`/first-run`** so admin token, optional API key pool, and optional **settings profile** are collected and saved only on disk (gitignored).
+- **Per-operator settings file:** Optional profile writes **`data/.local-runtime-profile.json`** (gitignored) and uses **`data/tornapijs-control-<slug>.json`**, or set **`TORN_ADMIN_PROFILE`** in the environment (same file naming). **`TORN_SETTINGS_DB_PATH`** still overrides the full path.
+- **Lock down public installs:** Optional **`FIRST_RUN_SECRET`**: completing setup requires HTTP header **`X-First-Run-Secret`** to match.
+
+### Notes
+
+- Gitignore now covers **`data/tornapijs-control-*.json`** and **`data/.local-runtime-profile.json`**.
+
+---
+
+## v2.3.7
+
+**Release date:** April 2026
+
+### Highlights
+
+- **Runtime settings without native modules:** `better-sqlite3` removed. Overrides and the admin bcrypt hash now live in **`data/tornapijs-control.json`** (same `TORN_SETTINGS_DB_PATH` override). No Python / MSVC / `node-gyp` required on **Node 24** Windows.
+
+### Notes
+
+- If you already used **`data/tornapijs-control.sqlite`**, copy values into the new JSON file by hand or re-save from the control panel; the app no longer reads SQLite.
+
+### Dependencies
+
+- Removed **better-sqlite3** (still: bcryptjs, express, marked, github-slugger).
+
+---
+
+## v2.3.6
+
+**Release date:** April 2026
+
+### Highlights
+
+- **Admin token from the UI:** first-time setup at **`/admin/control-panel`** saves a **bcrypt** hash under internal key **`__admin_token_bcrypt__`** in `data/tornapijs-control.sqlite` (via `POST /api/admin/bootstrap`). No CLI env var required to get started.
+- **Optional `TORN_ADMIN_TOKEN`:** if set, it still overrides verification for scripts and locked-down deploys.
+- **Change token in UI:** `PUT /api/admin/change-admin-token` when the env override is not in use.
+
+### Dependencies
+
+- Added **bcryptjs** (existing: better-sqlite3, express, marked, github-slugger).
+
+---
+
+## v2.3.5
+
+**Release date:** April 2026
+
+### Highlights
+
+- **Runtime settings database:** SQLite file **`data/tornapijs-control.sqlite`** (override with **`TORN_SETTINGS_DB_PATH`**) stores overrides for scoring thresholds, tier weights, Torn **`API_BASE`**, default export paths, public API key pool, and optional Torn error-code maps.
+- **Admin API:** `GET /api/admin/settings` and `PUT /api/admin/settings` with **`Authorization: Bearer`** matching env **`TORN_ADMIN_TOKEN`** (required to enable the API).
+- **Control panel:** new page **`/admin/control-panel`** to view and edit merged settings; client script **`web/public/admin-control.js`**.
+- **Code layout:** built-in defaults moved to **`src/constants-defaults.js`**; **`getMergedConstants()`** in **`src/constants.js`** merges defaults + DB for all Torn fetches and scoring.
+
+### Notes
+
+- New dependency: **`better-sqlite3`**. On first run the `data/` directory is created if missing; `*.sqlite` files under `data/` are gitignored.
+- **`TORN_PUBLIC_API_KEYS`** in the DB replaces the file-based pool when present; delete the override (PUT `null`) to fall back to **`src/static-api-keys.js`**.
+
+### Dependencies
+
+- Added **better-sqlite3** (existing: express, marked, github-slugger).
+
+---
+
 ## v2.3.4
 
 **Release date:** April 2026

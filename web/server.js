@@ -15,6 +15,13 @@ const {
     exportFactionByHofRankToSql,
 } = require(path.join(__dirname, '..', 'src', 'controllers', 'player-stats-csv-controller.js'));
 const { parsePlayerStatsSql } = require(path.join(__dirname, 'lib', 'parse-player-stats-sql.js'));
+const { applyCurrentScoringToExportRows } = require(path.join(
+    __dirname,
+    '..',
+    'src',
+    'utils',
+    'recompute-sql-export-display-scores.js',
+));
 const { decodeHtmlEntities } = require(path.join(__dirname, '..', 'src', 'utils', 'sql-append.js'));
 const {
     deleteExportedPlayerRowByIndex,
@@ -22,12 +29,10 @@ const {
     clearAllExportedPlayerRows,
     refreshExportedPlayerRowByIndex,
 } = require(path.join(__dirname, 'controllers', 'saved-player-export-controller.js'));
-const {
-    XANAX_PER_DAY_FOR_FULL_SCORE,
-    HOURS_PER_DAY_FOR_FULL_TIME_SCORE,
-    RECRUITMENT_TIER_XAN_WEIGHT,
-    RECRUITMENT_TIER_TIME_WEIGHT,
-} = require(path.join(__dirname, '..', 'src', 'constants.js'));
+const { getMergedConstants } = require(path.join(__dirname, '..', 'src', 'constants.js'));
+const { registerFirstRunRoutes } = require(path.join(__dirname, 'first-run-routes.js'));
+const { firstRunGate } = require(path.join(__dirname, 'first-run-middleware.js'));
+const { registerAdminSettingsRoutes } = require(path.join(__dirname, 'admin-settings-routes.js'));
 
 const ROOT = path.join(__dirname, '..');
 const EXPORTS_DIR = path.join(ROOT, 'exports');
@@ -89,7 +94,6 @@ const FIELD_LABELS = {
     hoursSinceLastAction: 'Hours since last action',
     xanScore: 'Xan score',
     averageTimeScore: 'Avg. time score',
-    combinedScore: 'Combined score (75% xan / 25% time)',
     tier: 'Tier',
     avgXanaxPerDay: 'Avg. Xanax / day',
     avgTimePlayedHoursPerDay: 'Avg. hours played / day (last month)',
@@ -117,18 +121,28 @@ const TIME_PLAYED_SECONDS_COLUMNS = new Set([
     'timePlayedDuringLastMonth',
 ]);
 
-/** Hover `title` text for score columns (matches `src/utils/scoring.js` + `constants.js`). */
-const SCORE_FORMULA_TOOLTIP = {
-    xanScore:
-        `Xan score (0–100): min(avg Xanax per day ÷ ${XANAX_PER_DAY_FOR_FULL_SCORE}, 1) × 100. `
-        + `${XANAX_PER_DAY_FOR_FULL_SCORE} Xanax/day average ⇒ 100%.`,
-    averageTimeScore:
-        `Time score (0–100): min(avg hours played per day ÷ ${HOURS_PER_DAY_FOR_FULL_TIME_SCORE}, 1) × 100, `
-        + `from the last-month timeplayed window. ${HOURS_PER_DAY_FOR_FULL_TIME_SCORE} h/day average ⇒ 100%.`,
-    combinedScore:
-        `Combined (0–100): ${RECRUITMENT_TIER_XAN_WEIGHT * 100}% × (xan score) + ${RECRUITMENT_TIER_TIME_WEIGHT * 100}% × (time score). `
-        + `Both inputs are the 0–100 values in this row. Tier uses combined score.`,
-};
+/** Hover `title` for score columns: short “what you set on Settings” copy (not full formulas). */
+function scoreFormulaTooltipForColumn(col) {
+    const {
+        XANAX_PER_DAY_FOR_FULL_SCORE,
+        HOURS_PER_DAY_FOR_FULL_TIME_SCORE,
+        RECRUITMENT_TIER_XAN_WEIGHT,
+        RECRUITMENT_TIER_TIME_WEIGHT,
+        AVG_DAYS_PER_MONTH,
+    } = getMergedConstants();
+    const xwPct = Math.round(RECRUITMENT_TIER_XAN_WEIGHT * 100);
+    const twPct = Math.round(RECRUITMENT_TIER_TIME_WEIGHT * 100);
+    const map = {
+        xanScore:
+            `Scoring setting: ${XANAX_PER_DAY_FOR_FULL_SCORE} Xanax per day on average → 100% xan score (adjust on Settings).`,
+        averageTimeScore:
+            `Scoring settings: ${HOURS_PER_DAY_FOR_FULL_TIME_SCORE} hours played per day → 100% time score; `
+            + `${AVG_DAYS_PER_MONTH} days treated as one month for averages (adjust on Settings).`,
+        combinedScore:
+            `Scoring settings: combined score is ${xwPct}% xan score + ${twPct}% time score; tier uses combined (adjust on Settings).`,
+    };
+    return map[col] || null;
+}
 
 function escapeHtml(s) {
     return String(s)
@@ -173,22 +187,24 @@ async function sendMarkdownPage(res, relPath, pageTitle, activeNav) {
     res.type('html').send(layout(pageTitle, activeNav, inner, 'page-md-doc'));
 }
 
-function nav(active) {
-    const items = [
-        ['/api/random', 'Random ranked', 'random'],
-        ['/api/by-id', 'Player by ID', 'byid'],
-        ['/api/faction-hof', 'Faction HoF', 'hof'],
-        ['/exports', 'Saved player data', 'exports'],
-        ['/readme', 'README', 'readme'],
-        ['/release-notes', 'Release notes', 'releases'],
-        ['/about', 'About', 'about'],
-    ];
-    const links = items
+function navLinkItems(items, active) {
+    return items
         .map(([href, label, id]) => {
             const cls = id === active ? ' aria-current="page"' : '';
             return `<a href="${href}"${cls}>${escapeHtml(label)}</a>`;
         })
         .join('\n');
+}
+
+function nav(active) {
+    const mainItems = [
+        ['/api/random', 'Random ranked', 'random'],
+        ['/api/by-id', 'Player by ID', 'byid'],
+        ['/api/faction-hof', 'Faction HoF', 'hof'],
+        ['/exports', 'Saved player data', 'exports'],
+        ['/admin/control-panel', 'Settings', 'admin'],
+    ];
+    const links = navLinkItems(mainItems, active);
     return `<header class="site-header">
   <div class="header-inner">
     <a href="/" class="site-brand" aria-label="Home">Botato's Torn Scripts</a>
@@ -200,6 +216,20 @@ function nav(active) {
     </div>
   </div>
 </header>`;
+}
+
+function siteFooter(active) {
+    const docItems = [
+        ['/readme', 'README', 'readme'],
+        ['/release-notes', 'Release notes', 'releases'],
+        ['/about', 'About', 'about'],
+    ];
+    const links = navLinkItems(docItems, active);
+    return `<footer class="site-footer">
+  <div class="footer-inner">
+    <nav class="footer-links" aria-label="Documentation">${links}</nav>
+  </div>
+</footer>`;
 }
 
 function layout(title, activeNav, inner, bodyClass = '') {
@@ -217,6 +247,7 @@ ${nav(activeNav)}
 <main>
 ${inner}
 </main>
+${siteFooter(activeNav)}
 <script src="/static/site.js" defer></script>
 </body>
 </html>`;
@@ -258,6 +289,10 @@ function orderedColumnsWithLastUpdateRow(orderedColumns) {
 }
 
 function fieldLabelForColumn(col) {
+    if (col === 'combinedScore') {
+        const { RECRUITMENT_TIER_XAN_WEIGHT, RECRUITMENT_TIER_TIME_WEIGHT } = getMergedConstants();
+        return `Combined score (${Math.round(RECRUITMENT_TIER_XAN_WEIGHT * 100)}% xan / ${Math.round(RECRUITMENT_TIER_TIME_WEIGHT * 100)}% time)`;
+    }
     if (Object.prototype.hasOwnProperty.call(FIELD_LABELS, col)) return FIELD_LABELS[col];
     return col.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (ch) => ch.toUpperCase());
 }
@@ -444,7 +479,7 @@ function formatTransposedDataCell(col, row) {
             return `<a class="cell-link" href="${escapeHtml(companyUrl)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
         }
     }
-    const scoreTip = SCORE_FORMULA_TOOLTIP[col];
+    const scoreTip = scoreFormulaTooltipForColumn(col);
     if (scoreTip) {
         return `<span class="cell-score-formula" title="${escapeHtml(scoreTip)}">${inner}</span>`;
     }
@@ -660,7 +695,12 @@ function resolvedExportPath(base) {
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '2mb' }));
 app.use('/static', express.static(path.join(__dirname, 'public')));
+
+registerFirstRunRoutes(app, { layout, escapeHtml });
+app.use(firstRunGate);
+registerAdminSettingsRoutes(app, { layout, escapeHtml });
 
 app.get('/readme', async (req, res) => {
     try {
@@ -960,6 +1000,9 @@ app.get('/exports/view/:file', async (req, res) => {
     const text = await fsp.readFile(full, 'utf8');
     const wantRaw = req.query.raw === '1' || req.query.raw === 'true';
     const parsed = parsePlayerStatsSql(text);
+    if (parsed?.rows?.length) {
+        applyCurrentScoringToExportRows(parsed.rows);
+    }
     const viewPath = `/exports/view/${encodeURIComponent(base)}`;
     const allNames = await listSqlBasenames();
     const at = allNames.indexOf(base);
@@ -993,7 +1036,8 @@ app.get('/exports/view/:file', async (req, res) => {
     const useBulk = parsed && !wantRaw && parsed.rows.length > 0;
 
     if (parsed && !wantRaw) {
-        meta = `<p class="export-meta"><span class="row-count">${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'}</span></p>`;
+        meta = `<p class="export-meta"><span class="row-count">${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'}</span>`
+            + ' <span class="muted">Xan / time / combined / tier use <strong>current</strong> scoring settings from the server (saved SQL is not rewritten).</span></p>';
         mainBlock = `<div class="card card-table">${renderPlayerStatsTable(parsed, base, { bulkRowsFormId: useBulk ? bulkRowsFormId : null })}</div>`;
         if (parsed.rows.length > 1) {
             sortBar = `<div class="bulk-toolbar sort-toolbar">

@@ -6,7 +6,7 @@
 
 const { fetchFaction } = require('../api/torn-client.js');
 const { messageForTornError } = require('./errors.js');
-const { TORN_FATAL_ERROR_CODES } = require('../constants.js');
+const { getMergedConstants } = require('../constants.js');
 
 function toFiniteNumber(value) {
     const n = Number(value);
@@ -17,6 +17,7 @@ function throwOnTornError(errorObj) {
     if (!errorObj) return;
     const message = messageForTornError(errorObj);
     const code = errorObj?.code ?? errorObj?.error_code;
+    const { TORN_FATAL_ERROR_CODES } = getMergedConstants();
     if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
         throw new Error(message || `Torn API error (code ${code}).`);
     }
@@ -179,6 +180,7 @@ async function fetchRankedWarsParticipatedLastMonth(params) {
     }
     if (data?.error) {
         const code = data.error?.code ?? data.error?.error_code;
+        const { TORN_FATAL_ERROR_CODES } = getMergedConstants();
         if (code != null && TORN_FATAL_ERROR_CODES.has(Number(code))) {
             throwOnTornError(data.error);
         }

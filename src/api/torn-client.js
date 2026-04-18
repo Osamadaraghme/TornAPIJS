@@ -4,8 +4,7 @@
  * Optional counter object increments on each request for usage tracking.
  */
 
-const { API_BASE } = require('../constants.js');
-const { TORN_PUBLIC_API_KEYS } = require('../static-api-keys.js');
+const { getMergedConstants } = require('../constants.js');
 
 function uniqueKeys(keys) {
     const out = [];
@@ -26,7 +25,7 @@ function uniqueKeys(keys) {
  * Priority:
  * 1) keys passed directly to the method (string or string[])
  * 2) process.env.TORN_API_KEY
- * 3) static key list (`src/static-api-keys.js`)
+ * 3) merged public key pool (`getMergedConstants().TORN_PUBLIC_API_KEYS` — DB or `src/static-api-keys.js`)
  */
 function resolveApiKeys(apiKeyOrKeys) {
     if (Array.isArray(apiKeyOrKeys) && apiKeyOrKeys.length) {
@@ -35,7 +34,8 @@ function resolveApiKeys(apiKeyOrKeys) {
     if (typeof apiKeyOrKeys === 'string' && apiKeyOrKeys.trim()) {
         return uniqueKeys([apiKeyOrKeys]);
     }
-    return uniqueKeys([process.env.TORN_API_KEY, ...(TORN_PUBLIC_API_KEYS || [])]);
+    const pool = getMergedConstants().TORN_PUBLIC_API_KEYS || [];
+    return uniqueKeys([process.env.TORN_API_KEY, ...pool]);
 }
 
 function tornErrorCode(data) {
@@ -53,7 +53,7 @@ function tornErrorCode(data) {
 async function requestWithApiKeyFailover(buildUrl, apiKeyOrKeys, counter) {
     const keys = resolveApiKeys(apiKeyOrKeys);
     if (!keys.length) {
-        throw new Error('No Torn API keys configured. Set TORN_API_KEY or add keys to src/static-api-keys.js.');
+        throw new Error('No Torn API keys configured. Set TORN_API_KEY, add keys in the control panel, or edit src/static-api-keys.js.');
     }
 
     let lastData = null;
@@ -86,7 +86,7 @@ async function requestWithApiKeyFailover(buildUrl, apiKeyOrKeys, counter) {
  */
 async function fetchUser(id, selections, apiKey, counter, queryParams = undefined) {
     return requestWithApiKeyFailover((key) => {
-        const url = new URL(`${API_BASE}/user/${id}`);
+        const url = new URL(`${getMergedConstants().API_BASE}/user/${id}`);
         url.searchParams.set('selections', selections);
         url.searchParams.set('key', key);
         if (queryParams && typeof queryParams === 'object') {
@@ -112,7 +112,7 @@ async function fetchTorn(selections, apiKey, counter, queryParams = undefined) {
     return requestWithApiKeyFailover((key) => {
         // Torn `factionhof` is v2-only and requires a category (`cat`).
         if (normalizedSelections === 'factionhof') {
-            const url = new URL(`${API_BASE}/v2/torn/factionhof`);
+            const url = new URL(`${getMergedConstants().API_BASE}/v2/torn/factionhof`);
             url.searchParams.set('key', key);
             const cat = (queryParams && queryParams.cat) ? String(queryParams.cat) : 'respect';
             url.searchParams.set('cat', cat);
@@ -125,7 +125,7 @@ async function fetchTorn(selections, apiKey, counter, queryParams = undefined) {
             return url;
         }
 
-        const url = new URL(`${API_BASE}/torn/`);
+        const url = new URL(`${getMergedConstants().API_BASE}/torn/`);
         url.searchParams.set('selections', selections);
         url.searchParams.set('key', key);
         if (queryParams && typeof queryParams === 'object') {
@@ -149,7 +149,7 @@ async function fetchTorn(selections, apiKey, counter, queryParams = undefined) {
  */
 async function fetchFaction(factionId, selections, apiKey, counter, queryParams = undefined) {
     return requestWithApiKeyFailover((key) => {
-        const url = new URL(`${API_BASE}/faction/${factionId}`);
+        const url = new URL(`${getMergedConstants().API_BASE}/faction/${factionId}`);
         url.searchParams.set('selections', selections);
         url.searchParams.set('key', key);
         if (queryParams && typeof queryParams === 'object') {
@@ -172,7 +172,7 @@ async function fetchFaction(factionId, selections, apiKey, counter, queryParams 
 async function fetchFactionName(factionId, apiKey, counter) {
     try {
         const data = await requestWithApiKeyFailover((key) => {
-            const url = new URL(`${API_BASE}/faction/${factionId}`);
+            const url = new URL(`${getMergedConstants().API_BASE}/faction/${factionId}`);
             url.searchParams.set('selections', 'basic');
             url.searchParams.set('key', key);
             return url;
@@ -196,7 +196,7 @@ async function fetchFactionName(factionId, apiKey, counter) {
 async function fetchCompanyName(companyId, apiKey, counter) {
     try {
         const data = await requestWithApiKeyFailover((key) => {
-            const url = new URL(`${API_BASE}/company/${companyId}`);
+            const url = new URL(`${getMergedConstants().API_BASE}/company/${companyId}`);
             url.searchParams.set('selections', 'profile');
             url.searchParams.set('key', key);
             return url;
@@ -268,7 +268,7 @@ function extractV2PersonalStatValue(data, statName) {
  */
 async function fetchUserPersonalStatV2(id, statName, apiKey, counter, timestamp = undefined) {
     const data = await requestWithApiKeyFailover((key) => {
-        const url = new URL(`${API_BASE}/v2/user/${id}/personalstats`);
+        const url = new URL(`${getMergedConstants().API_BASE}/v2/user/${id}/personalstats`);
         url.searchParams.set('stat', statName);
         url.searchParams.set('key', key);
         if (timestamp != null) url.searchParams.set('timestamp', String(timestamp));
@@ -292,7 +292,7 @@ async function fetchUserPersonalStatV2(id, statName, apiKey, counter, timestamp 
  */
 async function fetchUserPersonalStatsV2(id, statsCsv, apiKey, counter, timestamp = undefined) {
     const data = await requestWithApiKeyFailover((key) => {
-        const url = new URL(`${API_BASE}/v2/user/${id}/personalstats`);
+        const url = new URL(`${getMergedConstants().API_BASE}/v2/user/${id}/personalstats`);
         url.searchParams.set('stat', statsCsv);
         url.searchParams.set('key', key);
         if (timestamp != null) url.searchParams.set('timestamp', String(timestamp));

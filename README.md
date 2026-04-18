@@ -2,7 +2,7 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
-**Version:** **2.3.4** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)).
+**Version:** **3.0.0** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)). **v3** is a major web-focused release: **local admin controls**, first-run setup, gitignored settings, per-field saves, and live scoring in the export viewer — see **`/release-notes`** for the full list.
 
 Exports write `INSERT` rows to `.sql` files under `exports/` (created if missing). For a normal TornAPIJS export file, saving again for the same **`playerId` replaces that row** (full refresh from the API) instead of appending a duplicate; other rows stay as they are. New files list every column in model order (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
@@ -15,7 +15,7 @@ Exports write `INSERT` rows to `.sql` files under `exports/` (created if missing
 - [API keys (in-game)](https://www.torn.com/preferences.php#tab=api) — create or manage keys under Torn **Preferences → API**  
 - [Torn City](https://www.torn.com/) — main game site  
 
-HTTP requests from this project use **`https://api.torn.com`** (see `API_BASE` in `src/constants.js`).
+HTTP requests use the effective **`API_BASE`** from [`src/constants-defaults.js`](src/constants-defaults.js) (not editable via the control panel; change the defaults file or fork if you need another origin).
 
 ---
 
@@ -23,7 +23,7 @@ HTTP requests from this project use **`https://api.torn.com`** (see `API_BASE` i
 
 The browser UI uses the same controllers as the CLI. **Default URL:** [`http://localhost:3847`](http://localhost:3847) (override with env **`TORN_WEB_PORT`**). With the server running, append any path below (e.g. [`http://localhost:3847/api/by-id`](http://localhost:3847/api/by-id)).
 
-After a successful **Random ranked**, **Player by ID**, or **Faction HoF** run, the HTML result includes **Copy data** — one click copies the full result text (no manual select-all). On **Saved player data** file viewers (`/exports/view/…`), each player column has **Copy data** for that player’s saved row.
+After a successful **Random ranked**, **Player by ID**, or **Faction HoF** run, the HTML result includes **Copy data** — one click copies the full result text (no manual select-all). On **Saved player data** file viewers (`/exports/view/…`), each player column has **Copy data** for that player’s saved row. In **v3**, **table view** (not raw SQL) **recomputes** xan / time / combined scores and tier from the stored stats using **current** scoring settings each time you open the file; the `.sql` file on disk is unchanged.
 
 ### Setup and run
 
@@ -55,6 +55,28 @@ node web/server.js
 
 Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`). To use a single key without editing that file, set **`TORN_API_KEY`**.
 
+### Runtime settings (control panel)
+
+- **First run:** If the local settings JSON does not exist yet, the site sends you to **[`/first-run`](http://localhost:3847/first-run)** to create it (admin token, optional API keys, optional **settings profile**). Those paths are **gitignored**; do not commit them. On shared or public hosts, set **`FIRST_RUN_SECRET`** and send the same value as header **`X-First-Run-Secret`** when submitting the wizard.
+- **Page:** [`/admin/control-panel`](http://localhost:3847/admin/control-panel) — after the file exists, click **Load**, edit values, then use **Update** beside a single field (immediate one-key API save) or **Save all changes** for everything you changed. The page can keep the admin token in **sessionStorage** for convenience. Successful saves show a **brief highlight** on the field and a pulse on the status line. If **`TORN_ADMIN_TOKEN`** is not set, create the bcrypt-stored token here or during first-run.
+- **Settings file:** default **`data/tornapijs-control.json`** (pretty-printed JSON). Override the full path with **`TORN_SETTINGS_DB_PATH`**. For a **separate file per operator** on one machine, set **`TORN_ADMIN_PROFILE`** (e.g. `alice` → `data/tornapijs-control-alice.json`) or choose a profile name in the first-run wizard (writes **`data/.local-runtime-profile.json`** when env profile is not set).
+- **Optional env override:** if **`TORN_ADMIN_TOKEN`** is set on the server, it **replaces** the stored hash for API checks (useful for automation). To rely only on the UI-created token, leave **`TORN_ADMIN_TOKEN`** unset.
+- **Change token:** when not using the env override, use **Change admin token** on the same page (`PUT /api/admin/change-admin-token` with a valid bearer token).
+- **JSON API:** `GET /api/admin/settings` and `PUT /api/admin/settings` with `Authorization: Bearer <token>`. `PUT` body is a JSON object of setting names → values; use **`null`** to remove an override (fall back to defaults / `static-api-keys.js` for the key pool).
+- **Public status:** `GET /api/admin/auth-status` returns whether first-run setup is still required (`needsBootstrap`).
+
+### Constants reference (defaults + admin overrides)
+
+Built-in defaults live in **`src/constants-defaults.js`**. At runtime, [`getMergedConstants()`](src/constants.js) merges those with **only** the keys the admin may change in the local settings JSON (default **`data/tornapijs-control.json`**; see `src/settings/settings-repository.js` and `OVERRIDE_KEYS` in `src/runtime-config.js`):
+
+| Area | Names | Role |
+|------|--------|------|
+| Key pool | `TORN_PUBLIC_API_KEYS` | Array of 16-char keys; if unset in the JSON file, **`src/static-api-keys.js`** is used. Resolution order for requests is still: explicit key → **`TORN_API_KEY`** → merged public pool. |
+| Scoring | `AVG_DAYS_PER_MONTH`, `XANAX_PER_DAY_FOR_FULL_SCORE`, `HOURS_PER_DAY_FOR_FULL_TIME_SCORE` | Month length for averages; daily xanax / daily hours targets for 100% sub-scores. |
+| Tier mix | `RECRUITMENT_TIER_XAN_WEIGHT`, `RECRUITMENT_TIER_TIME_WEIGHT` | Must sum to **1** (default 0.75 / 0.25). |
+
+All other tunables (`API_BASE`, default SQL paths, Torn error maps, etc.) come **only** from `src/constants-defaults.js` (or code paths that pass explicit options), not from the admin JSON.
+
 ### Pages
 
 | Path | Purpose |
@@ -64,6 +86,8 @@ Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`)
 | [`/api/by-id`](http://localhost:3847/api/by-id) | Player by ID (`?playerId=` or `?q=` pre-fills the ID) |
 | [`/api/faction-hof`](http://localhost:3847/api/faction-hof) | Faction Hall of Fame rank → append rows |
 | [`/exports`](http://localhost:3847/exports) | Index of all `exports/*.sql` |
+| [`/first-run`](http://localhost:3847/first-run) | One-time setup when no local settings JSON exists yet |
+| [`/admin/control-panel`](http://localhost:3847/admin/control-panel) | Runtime settings editor (create admin token in-browser, or use **`TORN_ADMIN_TOKEN`**) |
 | `/exports/view/<file>.sql` | Table or raw SQL (e.g. [`/exports/view/active-ranked-player-by-id-stats.sql`](http://localhost:3847/exports/view/active-ranked-player-by-id-stats.sql); time played shown as days/hours; DB still stores seconds) |
 | [`/readme`](http://localhost:3847/readme) | This file (rendered) |
 | [`/release-notes`](http://localhost:3847/release-notes) | Changelog |
@@ -71,6 +95,7 @@ Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`)
 
 ### Navigation shortcuts
 
+- **Docs** (footer on every page): **README**, **Release notes**, and **About** — moved out of the main header in v3 for a cleaner tool bar.
 - **Quick go** (header): type to filter pages; **Ctrl+K** / **Cmd+K** or **`/`** (when not in a form field) focuses it; **Enter** opens the highlighted row.
 - **Digits only** (e.g. `3225726`): jump to **Player by ID** with that ID filled (`/api/by-id?playerId=…`).
 - **Search again** on API result pages returns to the same form (above the full result details).
@@ -84,6 +109,9 @@ Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`)
 ### Project layout (web)
 
 - `web/server.js` — Express app and HTML.
+- `web/admin-settings-routes.js` — admin JSON routes + control panel page wiring.
+- `src/services/admin-token-service.js` — admin bearer token (env or bcrypt in settings JSON) + bootstrap/change helpers.
+- `web/public/admin-control.js` — control panel client (load/save settings).
 - `web/controllers/saved-player-export-controller.js` — saved `.sql` file mutations (delete rows, clear all rows, **Update**). **Update** calls `exportPlayerByIdToSql` from `src/controllers/player-stats-csv-controller.js`, the same entry point as `/api/by-id` and the CLI.
 - `web/public/style.css` — styles.
 - `web/public/site.js` — header quick-jump behavior.

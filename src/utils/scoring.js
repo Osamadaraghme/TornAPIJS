@@ -3,13 +3,7 @@
  * Formula: XanScore = min((avg xanax per day) / XANAX_PER_DAY_FOR_FULL_SCORE, 1) * 100; tier from score.
  */
 
-const {
-    AVG_DAYS_PER_MONTH,
-    XANAX_PER_DAY_FOR_FULL_SCORE,
-    HOURS_PER_DAY_FOR_FULL_TIME_SCORE,
-    RECRUITMENT_TIER_XAN_WEIGHT,
-    RECRUITMENT_TIER_TIME_WEIGHT,
-} = require('../constants.js');
+const { getMergedConstants } = require('../constants.js');
 
 /** Clamp a number to [0, 1]. */
 function clamp01(x) {
@@ -22,8 +16,8 @@ function clamp01(x) {
  * Compute xanax score and averages for a given period.
  *
  * Behavior:
- * - If Torn provides a period-specific xanax total in `personalstats`, we use it.
- * - Otherwise we fall back to the lifetime total divided by account age.
+ * If Torn provides a period-specific xanax total in `personalstats`, we use it.
+ * Otherwise we fall back to the lifetime total divided by account age.
  *
  * @param {{ xanaxTakenTotal: number|null, xanaxTakenForPeriod: number|null, ageDays: number|null, period: 'day'|'month', avgXanaxPerDayMultiplier?: number }} opts
  * @returns {{ xanScore: number, finalScore: number, periodUsed: string, avgXanaxPerDay: number|null, avgXanaxPerMonth: number|null, statsAvailable: boolean }}
@@ -35,6 +29,10 @@ function computeScores({
     period,
     avgXanaxPerDayMultiplier = 1,
 }) {
+    const {
+        AVG_DAYS_PER_MONTH,
+        XANAX_PER_DAY_FOR_FULL_SCORE,
+    } = getMergedConstants();
     const safeAgeDays = Number.isFinite(ageDays) && ageDays > 0 ? ageDays : null;
     const usingMonth = period === 'month';
 
@@ -121,6 +119,7 @@ function isTierAtOrAbove(playerTier, minTier) {
  * @returns {{ avgHoursPerDay: number|null, timeScore: number, timeStatsAvailable: boolean }}
  */
 function computeTimePlayedScoreFromMonthlySeconds(secondsDuringLastMonth) {
+    const { AVG_DAYS_PER_MONTH, HOURS_PER_DAY_FOR_FULL_TIME_SCORE } = getMergedConstants();
     if (!Number.isFinite(secondsDuringLastMonth) || secondsDuringLastMonth < 0) {
         return { avgHoursPerDay: null, timeScore: 0, timeStatsAvailable: false };
     }
@@ -136,6 +135,7 @@ function computeTimePlayedScoreFromMonthlySeconds(secondsDuringLastMonth) {
  * @param {number} timeScore01 - from computeTimePlayedScoreFromMonthlySeconds().timeScore
  */
 function combinedRecruitmentScore01(xanScore01, timeScore01) {
+    const { RECRUITMENT_TIER_XAN_WEIGHT, RECRUITMENT_TIER_TIME_WEIGHT } = getMergedConstants();
     const x = Number.isFinite(xanScore01) ? clamp01(xanScore01) : 0;
     const t = Number.isFinite(timeScore01) ? clamp01(timeScore01) : 0;
     return clamp01(
