@@ -2,7 +2,7 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
-**Version:** **2.3.3** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)).
+**Version:** **2.3.4** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)).
 
 Exports write `INSERT` rows to `.sql` files under `exports/` (created if missing). For a normal TornAPIJS export file, saving again for the same **`playerId` replaces that row** (full refresh from the API) instead of appending a duplicate; other rows stay as they are. New files list every column in model order (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
@@ -84,6 +84,7 @@ Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`)
 ### Project layout (web)
 
 - `web/server.js` — Express app and HTML.
+- `web/controllers/saved-player-export-controller.js` — saved `.sql` file mutations (delete rows, clear all rows, **Update**). **Update** calls `exportPlayerByIdToSql` from `src/controllers/player-stats-csv-controller.js`, the same entry point as `/api/by-id` and the CLI.
 - `web/public/style.css` — styles.
 - `web/public/site.js` — header quick-jump behavior.
 

@@ -252,30 +252,60 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
 (function initExportViewColumnReorder() {
     let columnDragActive = false;
     let dragSourceTh = null;
+    let dragSourceIdx = null;
+    let dragTargetTh = null;
+    let dragDropAfter = false;
 
     function clearDropHighlights(table) {
         if (!table) return;
-        table.querySelectorAll('thead .th-record--drop-target').forEach((el) => {
+        table.querySelectorAll('thead .th-record--drop-target, thead .th-record--drop-before, thead .th-record--drop-after').forEach((el) => {
             el.classList.remove('th-record--drop-target');
+            el.classList.remove('th-record--drop-before');
+            el.classList.remove('th-record--drop-after');
         });
     }
 
-    /**
-     * Move the player column at table cellIndex `fromIdx` to sit immediately before column `toIdx`
-     * (same semantics as drop target header). Works for any from/to because we reorder a detached
-     * player-cell list with splice instead of insertBefore (which breaks when fromIdx < toIdx).
-     */
-    function reorderPlayerColumns(table, fromIdx, toIdx) {
-        if (fromIdx === toIdx || fromIdx < 1 || toIdx < 1) return;
+    function clearColumnClass(table, className) {
+        if (!table || !className) return;
+        table.querySelectorAll(`.${className}`).forEach((el) => el.classList.remove(className));
+    }
+
+    function markColumnByCellIndex(table, cellIndex, className) {
+        if (!table || !Number.isInteger(cellIndex) || cellIndex < 1) return;
         const theadRow = table.tHead?.rows[0];
         const tbody = table.tBodies[0];
         if (!theadRow || !tbody) return;
         const max = theadRow.cells.length - 1;
-        if (fromIdx > max || toIdx > max) return;
+        if (cellIndex > max) return;
+        const rows = [theadRow, ...Array.from(tbody.rows)];
+        for (const tr of rows) {
+            const cell = tr.cells[cellIndex];
+            if (cell) cell.classList.add(className);
+        }
+    }
+
+    function setDragCursorState(on) {
+        document.body.classList.toggle('export-col-drag-active', Boolean(on));
+    }
+
+    /**
+     * Move a player column to a target insertion point (0..N in player-only coordinates),
+     * where 0 is first player column and N means "insert at end / become last".
+     */
+    function reorderPlayerColumns(table, fromIdx, insertAtPlayerIdx) {
+        if (fromIdx < 1) return;
+        const theadRow = table.tHead?.rows[0];
+        const tbody = table.tBodies[0];
+        if (!theadRow || !tbody) return;
+        const max = theadRow.cells.length - 1;
+        if (fromIdx > max) return;
 
         const from = fromIdx - 1;
-        const to = toIdx - 1;
-        if (from === to) return;
+        const playerCount = max;
+        if (!Number.isInteger(insertAtPlayerIdx) || insertAtPlayerIdx < 0 || insertAtPlayerIdx > playerCount) return;
+        let insertAt = insertAtPlayerIdx;
+        if (from < insertAt) insertAt -= 1;
+        if (from === insertAt) return;
 
         const rows = [theadRow, ...Array.from(tbody.rows)];
         for (const tr of rows) {
@@ -285,11 +315,7 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
             }
             const item = playerCells.splice(from, 1)[0];
             if (!item) continue;
-            if (from < to) {
-                playerCells.splice(to - 1, 0, item);
-            } else {
-                playerCells.splice(to, 0, item);
-            }
+            playerCells.splice(insertAt, 0, item);
             for (const c of playerCells) {
                 tr.appendChild(c);
             }
@@ -305,7 +331,12 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
         if (!th) return;
         columnDragActive = true;
         dragSourceTh = th;
+        dragSourceIdx = th.cellIndex;
+        dragTargetTh = null;
+        dragDropAfter = false;
         th.classList.add('th-record--dragging');
+        markColumnByCellIndex(table, dragSourceIdx, 'col-drag-source');
+        setDragCursorState(true);
         const idx = th.cellIndex;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(idx));
@@ -316,8 +347,15 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
         const table = dragSourceTh.closest('table.export-table-transposed');
         dragSourceTh.classList.remove('th-record--dragging');
         dragSourceTh = null;
+        dragSourceIdx = null;
+        dragTargetTh = null;
+        dragDropAfter = false;
         columnDragActive = false;
         clearDropHighlights(table);
+        clearColumnClass(table, 'col-drag-source');
+        clearColumnClass(table, 'col-drop-target-before');
+        clearColumnClass(table, 'col-drop-target-after');
+        setDragCursorState(false);
     });
 
     document.addEventListener('dragover', (e) => {
@@ -327,9 +365,17 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         clearDropHighlights(table);
+        clearColumnClass(table, 'col-drop-target-before');
+        clearColumnClass(table, 'col-drop-target-after');
         const th = e.target.closest('thead th.th-record');
         if (th && table.contains(th)) {
+            const rect = th.getBoundingClientRect();
+            const dropAfter = e.clientX > (rect.left + rect.width / 2);
+            dragTargetTh = th;
+            dragDropAfter = dropAfter;
             th.classList.add('th-record--drop-target');
+            th.classList.add(dropAfter ? 'th-record--drop-after' : 'th-record--drop-before');
+            markColumnByCellIndex(table, th.cellIndex, dropAfter ? 'col-drop-target-after' : 'col-drop-target-before');
         }
     });
 
@@ -344,14 +390,112 @@ window.confirmBulkSubmit = function confirmBulkSubmit(formId, label) {
             fromIdx = Number.parseInt(e.dataTransfer.getData('application/x-export-col'), 10);
         }
         const toIdx = th.cellIndex;
+        const toPlayerIdx = toIdx - 1;
+        const dropAfter = (dragTargetTh === th) ? dragDropAfter : (e.clientX > (th.getBoundingClientRect().left + th.getBoundingClientRect().width / 2));
+        const insertAtPlayerIdx = dropAfter ? (toPlayerIdx + 1) : toPlayerIdx;
         clearDropHighlights(table);
-        if (Number.isFinite(fromIdx) && Number.isFinite(toIdx)) {
-            reorderPlayerColumns(table, fromIdx, toIdx);
+        clearColumnClass(table, 'col-drop-target-before');
+        clearColumnClass(table, 'col-drop-target-after');
+        if (Number.isFinite(fromIdx) && Number.isFinite(toIdx) && Number.isFinite(insertAtPlayerIdx)) {
+            reorderPlayerColumns(table, fromIdx, insertAtPlayerIdx);
         }
         columnDragActive = false;
         if (dragSourceTh) {
             dragSourceTh.classList.remove('th-record--dragging');
             dragSourceTh = null;
         }
+        dragSourceIdx = null;
+        dragTargetTh = null;
+        dragDropAfter = false;
+        clearColumnClass(table, 'col-drag-source');
+        setDragCursorState(false);
+    });
+})();
+
+/**
+ * Saved player data viewer: sort player columns by key metrics.
+ * Sort acts on visual columns only (file order is unchanged unless rows are rewritten elsewhere).
+ */
+(function initExportViewSortControls() {
+    function getRowsData() {
+        const script = document.getElementById('export-view-rows-json');
+        if (!script?.textContent) return null;
+        try {
+            const rows = JSON.parse(script.textContent);
+            return Array.isArray(rows) ? rows : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function currentOriginalOrderFromHeader(theadRow) {
+        return Array.from(theadRow.cells)
+            .slice(1)
+            .map((th) => {
+                const btn = th.querySelector('.btn-copy-player-json');
+                const raw = btn?.getAttribute('data-player-row');
+                const n = Number(raw);
+                return Number.isInteger(n) && n >= 0 ? n : null;
+            })
+            .filter((n) => n != null);
+    }
+
+    function reorderTableByOriginalOrder(table, desiredOriginalOrder) {
+        const theadRow = table.tHead?.rows[0];
+        const tbody = table.tBodies[0];
+        if (!theadRow || !tbody || !Array.isArray(desiredOriginalOrder) || desiredOriginalOrder.length === 0) return;
+
+        const currentOrder = currentOriginalOrderFromHeader(theadRow);
+        if (currentOrder.length !== desiredOriginalOrder.length) return;
+        const rows = [theadRow, ...Array.from(tbody.rows)];
+        for (const tr of rows) {
+            const playerCells = [];
+            while (tr.cells.length > 1) {
+                playerCells.push(tr.removeChild(tr.cells[1]));
+            }
+            const reorderedCells = [];
+            for (const origIdx of desiredOriginalOrder) {
+                const pos = currentOrder.indexOf(origIdx);
+                if (pos >= 0 && playerCells[pos]) reorderedCells.push(playerCells[pos]);
+            }
+            for (const c of reorderedCells) tr.appendChild(c);
+        }
+    }
+
+    function toSortableNumber(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+    }
+
+    function buildSortedOriginalOrder(rows, key) {
+        const withOriginal = rows.map((row, idx) => ({ idx, row }));
+        withOriginal.sort((a, b) => {
+            const av = toSortableNumber(a.row?.[key]);
+            const bv = toSortableNumber(b.row?.[key]);
+            if (bv !== av) return bv - av;
+            return a.idx - b.idx;
+        });
+        return withOriginal.map((x) => x.idx);
+    }
+
+    const applyBtn = document.getElementById('export-player-sort-apply');
+    const resetBtn = document.getElementById('export-player-sort-reset');
+    const select = document.getElementById('export-player-sort-key');
+    const table = document.querySelector('table.export-table-transposed');
+    if (!applyBtn || !resetBtn || !select || !table) return;
+
+    applyBtn.addEventListener('click', () => {
+        const rows = getRowsData();
+        if (!rows || rows.length < 2) return;
+        const key = select.value || 'combinedScore';
+        const desiredOrder = buildSortedOriginalOrder(rows, key);
+        reorderTableByOriginalOrder(table, desiredOrder);
+    });
+
+    resetBtn.addEventListener('click', () => {
+        const rows = getRowsData();
+        if (!rows || rows.length < 2) return;
+        const originalOrder = rows.map((_, idx) => idx);
+        reorderTableByOriginalOrder(table, originalOrder);
     });
 })();

@@ -2,6 +2,25 @@
 
 **Torn references:** [API documentation](https://staticfiles.torn.com/api.html) · [API v2 (Swagger)](https://www.torn.com/swagger.php) · [API keys (in-game)](https://www.torn.com/preferences.php#tab=api)
 
+## v2.3.4
+
+**Release date:** April 2026
+
+### Highlights
+
+- **Web MVC cleanup (saved exports):** row delete, bulk delete, clear-all-rows, and per-column **Update** are implemented in `web/controllers/saved-player-export-controller.js`; `web/server.js` routes stay validation and redirect only.
+- **Single by-id stack:** viewer **Update** and `/api/by-id` both go through `exportPlayerByIdToSql` → `getActiveRankedPlayerByIdToSql` (documented on `src/controllers/player-stats-csv-controller.js`).
+
+### Notes
+
+- No change to Torn selections, scoring, or export column set; behavior matches v2.3.3 for these actions.
+
+### Dependencies
+
+- Unchanged (**express**, **marked**, **github-slugger**).
+
+---
+
 ## v2.3.3
 
 **Release date:** April 2026

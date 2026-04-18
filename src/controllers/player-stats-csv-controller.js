@@ -11,6 +11,11 @@ function exportRandomActivePlayerToSql(apiKey, options = {}) {
     return getRandomActiveRankedPlayerToSql(apiKey, options);
 }
 
+/**
+ * By-id SQL export (CLI, `/api/by-id`, and saved export viewer **Update** all use this).
+ * @param {number|string} playerId
+ * @param {{ sqlPath?: string, apiKey?: string }} [options]
+ */
 function exportPlayerByIdToSql(playerId, options = {}) {
     return getActiveRankedPlayerByIdToSql(playerId, options);
 }

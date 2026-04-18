@@ -15,13 +15,13 @@ const {
     exportFactionByHofRankToSql,
 } = require(path.join(__dirname, '..', 'src', 'controllers', 'player-stats-csv-controller.js'));
 const { parsePlayerStatsSql } = require(path.join(__dirname, 'lib', 'parse-player-stats-sql.js'));
+const { decodeHtmlEntities } = require(path.join(__dirname, '..', 'src', 'utils', 'sql-append.js'));
 const {
-    decodeHtmlEntities,
-    writeSqlExportFile,
-    pickRowForHeaders,
-    DEFAULT_TABLE_NAME,
-} = require(path.join(__dirname, '..', 'src', 'utils', 'sql-append.js'));
-const { CSV_HEADERS } = require(path.join(__dirname, '..', 'src', 'models', 'player-stats-csv-model.js'));
+    deleteExportedPlayerRowByIndex,
+    deleteExportedPlayerRowsByIndices,
+    clearAllExportedPlayerRows,
+    refreshExportedPlayerRowByIndex,
+} = require(path.join(__dirname, 'controllers', 'saved-player-export-controller.js'));
 const {
     XANAX_PER_DAY_FOR_FULL_SCORE,
     HOURS_PER_DAY_FOR_FULL_TIME_SCORE,
@@ -874,19 +874,11 @@ app.post('/exports/view/:file/delete-row', async (req, res) => {
         return;
     }
     const rowIndex = Number(req.body?.rowIndex);
-    if (!Number.isInteger(rowIndex) || rowIndex < 0) {
+    const del = await deleteExportedPlayerRowByIndex(full, rowIndex);
+    if (!del.ok) {
         res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
         return;
     }
-    const text = await fsp.readFile(full, 'utf8');
-    const parsed = parsePlayerStatsSql(text);
-    if (!parsed || rowIndex >= parsed.rows.length) {
-        res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
-        return;
-    }
-    const nextRows = parsed.rows.filter((_, i) => i !== rowIndex);
-    const normalized = nextRows.map((r) => pickRowForHeaders(CSV_HEADERS, r));
-    writeSqlExportFile(full, CSV_HEADERS, normalized, { tableName: DEFAULT_TABLE_NAME });
     res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
 });
 
@@ -903,25 +895,12 @@ app.post('/exports/view/:file/delete-rows', async (req, res) => {
     }
     const rawIdx = req.body?.rowIndex;
     const rawList = rawIdx == null ? [] : Array.isArray(rawIdx) ? rawIdx : [rawIdx];
-    const removeSet = new Set();
-    for (const v of rawList) {
-        const n = Number(v);
-        if (Number.isInteger(n) && n >= 0) removeSet.add(n);
-    }
-    if (removeSet.size === 0) {
+    const del = await deleteExportedPlayerRowsByIndices(full, rawList);
+    if (!del.ok) {
         res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
         return;
     }
-    const text = await fsp.readFile(full, 'utf8');
-    const parsed = parsePlayerStatsSql(text);
-    if (!parsed) {
-        res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
-        return;
-    }
-    const nextRows = parsed.rows.filter((_, i) => !removeSet.has(i));
-    const normalized = nextRows.map((r) => pickRowForHeaders(CSV_HEADERS, r));
-    writeSqlExportFile(full, CSV_HEADERS, normalized, { tableName: DEFAULT_TABLE_NAME });
-    res.redirect(303, `/exports/view/${encodeURIComponent(base)}?deletedRows=${removeSet.size}`);
+    res.redirect(303, `/exports/view/${encodeURIComponent(base)}?deletedRows=${del.deletedCount}`);
 });
 
 app.post('/exports/view/:file/delete-all-rows', async (req, res) => {
@@ -935,7 +914,7 @@ app.post('/exports/view/:file/delete-all-rows', async (req, res) => {
         res.status(404).type('html').send(layout('Not found', 'exports', `<p class="msg-err">File not found: ${escapeHtml(base)}</p>`));
         return;
     }
-    writeSqlExportFile(full, CSV_HEADERS, [], { tableName: DEFAULT_TABLE_NAME });
+    clearAllExportedPlayerRows(full);
     res.redirect(303, `/exports/view/${encodeURIComponent(base)}?clearedAll=1`);
 });
 
@@ -951,29 +930,20 @@ app.post('/exports/view/:file/update-row', async (req, res) => {
         return;
     }
     const rowIndex = Number(req.body?.rowIndex);
-    if (!Number.isInteger(rowIndex) || rowIndex < 0) {
+    const upd = await refreshExportedPlayerRowByIndex(full, rowIndex);
+    if (!upd.ok) {
+        if (upd.code === 'bad_player_id' && upd.message) {
+            res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updateErr=${encodeURIComponent(upd.message)}`);
+            return;
+        }
+        if (upd.code === 'api_error' && upd.message) {
+            res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updateErr=${encodeURIComponent(upd.message)}`);
+            return;
+        }
         res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
         return;
     }
-    const text = await fsp.readFile(full, 'utf8');
-    const parsed = parsePlayerStatsSql(text);
-    if (!parsed || rowIndex >= parsed.rows.length) {
-        res.redirect(303, `/exports/view/${encodeURIComponent(base)}`);
-        return;
-    }
-    const playerId = parsed.rows[rowIndex]?.playerId;
-    const pNum = Number(playerId);
-    if (!Number.isFinite(pNum) || pNum <= 0) {
-        res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updateErr=${encodeURIComponent(`Row ${rowIndex + 1} has no valid playerId`)}`);
-        return;
-    }
-    try {
-        await exportPlayerByIdToSql(pNum, { sqlPath: full });
-        res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updatedId=${encodeURIComponent(String(Math.floor(pNum)))}`);
-    } catch (err) {
-        const msg = err?.message ? String(err.message) : String(err);
-        res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updateErr=${encodeURIComponent(msg)}`);
-    }
+    res.redirect(303, `/exports/view/${encodeURIComponent(base)}?updatedId=${encodeURIComponent(String(upd.playerId))}`);
 });
 
 app.get('/exports/view/:file', async (req, res) => {
@@ -991,6 +961,11 @@ app.get('/exports/view/:file', async (req, res) => {
     const wantRaw = req.query.raw === '1' || req.query.raw === 'true';
     const parsed = parsePlayerStatsSql(text);
     const viewPath = `/exports/view/${encodeURIComponent(base)}`;
+    const allNames = await listSqlBasenames();
+    const at = allNames.indexOf(base);
+    const prevBase = at > 0 ? allNames[at - 1] : null;
+    const nextBase = at >= 0 && at < allNames.length - 1 ? allNames[at + 1] : null;
+    const titleName = humanizeSqlFileName(base);
 
     let flash = '';
     if (req.query.deletedRows) {
@@ -1003,20 +978,36 @@ app.get('/exports/view/:file', async (req, res) => {
         flash = `<p class="msg-err">Update failed: ${escapeHtml(String(req.query.updateErr))}</p>`;
     }
 
-    const links = `<p class="export-view-links"><a href="/exports">All exports</a></p>`;
+    const links = `<p class="export-view-links">
+  <a href="/exports">All exports</a>
+  ${prevBase ? `<a class="btn export-nav-btn" href="/exports/view/${encodeURIComponent(prevBase)}" aria-label="Open previous file">← Previous file</a>` : ''}
+  ${nextBase ? `<a class="btn export-nav-btn" href="/exports/view/${encodeURIComponent(nextBase)}" aria-label="Open next file">Next file →</a>` : ''}
+</p>`;
     let meta = '';
     let mainBlock;
     let bulkBar = '';
     let bulkForms = '';
+    let sortBar = '';
 
     const bulkRowsFormId = 'bulk-rows-form';
     const useBulk = parsed && !wantRaw && parsed.rows.length > 0;
 
     if (parsed && !wantRaw) {
-        meta = `<p class="export-meta"><span class="row-count">${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'}</span>
-  <span class="sep">·</span>
-  <a href="${escapeHtml(viewPath)}?raw=1">Raw SQL</a></p>`;
+        meta = `<p class="export-meta"><span class="row-count">${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'}</span></p>`;
         mainBlock = `<div class="card card-table">${renderPlayerStatsTable(parsed, base, { bulkRowsFormId: useBulk ? bulkRowsFormId : null })}</div>`;
+        if (parsed.rows.length > 1) {
+            sortBar = `<div class="bulk-toolbar sort-toolbar">
+  <label class="sort-toolbar-label" for="export-player-sort-key">Sort players by</label>
+  <select id="export-player-sort-key" class="sort-toolbar-select" aria-label="Sort players by metric">
+    <option value="combinedScore" selected>Combined score (default)</option>
+    <option value="averageTimeScore">Avg. time score</option>
+    <option value="xanScore">Xan score</option>
+    <option value="rankedWarHitsDuringLastMonth">Ranked war hits (last month)</option>
+  </select>
+  <button type="button" id="export-player-sort-apply" class="btn">Sort players</button>
+  <button type="button" id="export-player-sort-reset" class="btn">Reset order</button>
+</div>`;
+        }
     } else {
         if (parsed && wantRaw) {
             meta = `<p class="export-meta"><a href="${escapeHtml(viewPath)}">Table view</a> — ${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'}</p>`;
@@ -1046,13 +1037,14 @@ app.get('/exports/view/:file', async (req, res) => {
 
     const toolbar = `<div class="export-toolbar">${links}${meta}</div>`;
     const body = `
-<h1>${escapeHtml(base)}</h1>
+<h1>${escapeHtml(titleName)}</h1>
 ${flash}
 ${bulkForms}
 ${toolbar}
 ${bulkBar}
+${sortBar}
 ${mainBlock}`;
-    res.type('html').send(layout(base, 'exports', body, 'page-export-sql'));
+    res.type('html').send(layout(titleName, 'exports', body, 'page-export-sql'));
 });
 
 app.get('/api/random', (req, res) => {
