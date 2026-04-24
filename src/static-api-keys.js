@@ -3,9 +3,7 @@
  * Rotation behavior is implemented in `src/api/torn-client.js`.
  */
 
-const TORN_PUBLIC_API_KEYS = [
-    'Bf0F4qebJLvo2Mj0',
-];
+const TORN_PUBLIC_API_KEYS = [];
 
 module.exports = {
     TORN_PUBLIC_API_KEYS,
