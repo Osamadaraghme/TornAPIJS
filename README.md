@@ -17,7 +17,7 @@ All public APIs append `INSERT` rows to `.sql` files (create if missing, append 
 ## API key behavior
 
 - Default key pool is in `src/static-api-keys.js`.
-- Current default key is `Bf0F4qebJLvo2Mj0`.
+- Current default key is `Your16CharKeyHere`.
 - You can override with `TORN_API_KEY`.
 - If Torn returns rate-limit code `5`, the client tries the next key in the pool.
 
