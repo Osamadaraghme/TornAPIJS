@@ -2,7 +2,7 @@
 
 SQL-export Torn recruitment APIs in JavaScript.
 
-**Version:** **3.0.0** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)). **v3** is a major web-focused release: **local admin controls**, first-run setup, gitignored settings, per-field saves, and live scoring in the export viewer — see **`/release-notes`** for the full list.
+**Version:** **3.0.2** ([`package.json`](package.json), [`RELEASE_NOTES.md`](RELEASE_NOTES.md)). **v3** is a major web-focused release: **local admin controls**, first-run setup, gitignored settings, per-field saves, and live scoring in the export viewer — see **`/release-notes`** for the full list.
 
 Exports write `INSERT` rows to `.sql` files under `exports/` (created if missing). For a normal TornAPIJS export file, saving again for the same **`playerId` replaces that row** (full refresh from the API) instead of appending a duplicate; other rows stay as they are. New files list every column in model order (`CSV_HEADERS` in `src/models/player-stats-csv-model.js`).
 
@@ -53,7 +53,7 @@ node web/server.js
 
 ### Environment
 
-Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`). To use a single key without editing that file, set **`TORN_API_KEY`**.
+Default keys are listed in **`src/static-api-keys.js`** (`TORN_PUBLIC_API_KEYS`) and should stay placeholder-only unless intentionally public. To use a single key without editing that file, set **`TORN_API_KEY`**.
 
 ### Runtime settings (control panel)
 
@@ -141,8 +141,8 @@ Example:
 
 ```javascript
 const TORN_PUBLIC_API_KEYS = [
-    'Bf0F4qebJLvo2Mj0',
     'Your16CharKeyHere',
+    'Another16CharKey',
 ];
 ```
 

@@ -3,6 +3,8 @@ node_modules/
 *.log
 exports/
 data/tornapijs-control.json
+data/tornapijs-control-*.json
+data/.local-runtime-profile.json
 data/*.json.tmp
 data/*.sqlite
 data/*.sqlite-shm

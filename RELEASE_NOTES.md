@@ -2,6 +2,18 @@
 
 **Torn references:** [API documentation](https://staticfiles.torn.com/api.html) · [API v2 (Swagger)](https://www.torn.com/swagger.php) · [API keys (in-game)](https://www.torn.com/preferences.php#tab=api)
 
+## v3.0.2
+
+**Release date:** April 24, 2026
+
+### Security and docs
+
+- **Removed exposed key:** deleted a committed public API key from **`src/static-api-keys.js`** and replaced README key examples with placeholders.
+- **Safer gitignore defaults:** added **`data/tornapijs-control-*.json`** and **`data/.local-runtime-profile.json`** so profile-specific local control files are never committed by accident.
+- **Agent onboarding:** added **`AGENT_PROJECT_GUIDE.md`** with project structure, run/verify commands, layering rules, and secret-handling guidance for new coding agents.
+
+---
+
 ## v3.0.1
 
 **Release date:** April 19, 2026
