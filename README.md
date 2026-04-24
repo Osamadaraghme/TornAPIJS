@@ -111,7 +111,7 @@ Example:
 
 ```javascript
 const TORN_PUBLIC_API_KEYS = [
-    'Bf0F4qebJLvo2Mj0',
+    'Your16CharKeyHere',
     'Your16CharKeyHere',
 ];
 ```
